@@ -1,0 +1,48 @@
+---
+source: crates/core/tests/arch.rs
+expression: recommended_plan(&sys)
+---
+Bootcraft plan for Arch Linux (12 tasks)
+
+[1/12] Colorful pacman output  (arch.pacman-tweaks)
+    $ edit /etc/pacman.conf: enable Color in [options]
+    $ edit /etc/pacman.conf: enable ILoveCandy in [options]
+
+[2/12] Enable the multilib repository  (arch.multilib)
+    $ edit /etc/pacman.conf: enable the [multilib] repository
+
+[3/12] Update the system  (system.update)
+    $ pacman -Syu --noconfirm
+
+[4/12] Build tools (base-devel, git)  (arch.build-tools)
+    $ pacman -S --needed --noconfirm base-devel git
+
+[5/12] NVIDIA 580 legacy driver (AUR)  (gpu.nvidia)
+    $ pacman -Rns --noconfirm nvidia-open nvidia-open-dkms nvidia-open-lts nvidia-utils lib32-nvidia-utils (installed ones only)
+    $ pacman -S --needed --noconfirm linux-headers linux-lts-headers
+    $ build from the AUR as your user, then pacman -U: nvidia-580xx-utils lib32-nvidia-580xx-utils nvidia-580xx-dkms
+
+[6/12] Hardware video decoding on NVIDIA  (gpu.nvidia-vaapi)
+    $ pacman -S --needed --noconfirm libva-nvidia-driver
+
+[7/12] paru AUR helper  (arch.paru)
+    $ build from the AUR as your user, then pacman -U: paru-bin
+    $ edit /etc/paru.conf: enable BottomUp in [options]
+
+[8/12] Flatpak with Flathub  (flatpak.flathub)
+    $ pacman -S --needed --noconfirm flatpak
+    $ flatpak remote-add --if-not-exists --system flathub https://dl.flathub.org/repo/flathub.flatpakrepo
+
+[9/12] Media codecs and thumbnails  (media.codecs)
+    $ pacman -S --needed --noconfirm gst-libav gst-plugins-base gst-plugins-good gst-plugins-bad gst-plugins-ugly gst-plugin-va ffmpegthumbnailer
+
+[10/12] Video player: Celluloid + mpv  (media.player)
+    $ pacman -S --needed --noconfirm celluloid mpv
+
+[11/12] Archive tools  (tools.archive)
+    $ pacman -S --needed --noconfirm tar gzip zip unzip 7zip unrar
+
+[12/12] Firefox  (apps.firefox)
+    $ pacman -S --needed --noconfirm firefox
+
+A reboot is required afterwards.

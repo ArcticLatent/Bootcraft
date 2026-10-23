@@ -1,0 +1,57 @@
+---
+source: crates/core/tests/arch.rs
+expression: everything
+---
+Bootcraft plan for Arch Linux (13 tasks)
+
+[1/13] Colorful pacman output  (arch.pacman-tweaks)
+    $ edit /etc/pacman.conf: enable Color in [options]
+    $ edit /etc/pacman.conf: enable ILoveCandy in [options]
+
+[2/13] Enable the multilib repository  (arch.multilib)
+    $ edit /etc/pacman.conf: enable the [multilib] repository
+
+[3/13] Update the system  (system.update)
+    $ pacman -Syu --noconfirm
+
+[4/13] Build tools (base-devel, git)  (arch.build-tools)
+    $ pacman -S --needed --noconfirm base-devel git
+
+[5/13] paru AUR helper  (arch.paru)
+    $ build from the AUR as your user, then pacman -U: paru-bin
+    $ edit /etc/paru.conf: enable BottomUp in [options]
+
+[6/13] Flatpak with Flathub  (flatpak.flathub)
+    $ pacman -S --needed --noconfirm flatpak
+    $ flatpak remote-add --if-not-exists --system flathub https://dl.flathub.org/repo/flathub.flatpakrepo
+
+[7/13] Media codecs and thumbnails  (media.codecs)
+    $ pacman -S --needed --noconfirm gst-libav gst-plugins-base gst-plugins-good gst-plugins-bad gst-plugins-ugly gst-plugin-va ffmpegthumbnailer
+
+[8/13] Video player: Showtime  (media.player)
+    $ pacman -S --needed --noconfirm showtime
+
+[9/13] Archive tools  (tools.archive)
+    $ pacman -S --needed --noconfirm tar gzip zip unzip 7zip unrar
+
+[10/13] Firefox  (apps.firefox)
+    $ pacman -S --needed --noconfirm firefox
+
+[11/13] Linux Mint look for Cinnamon  (desktop.cinnamon-mint)
+    $ pacman -S --needed --noconfirm ristretto papers gedit gnome-calculator papirus-icon-theme file-roller nemo-fileroller
+    $ pacman -Rns --noconfirm engrampa (installed ones only)
+    $ build from the AUR as your user, then pacman -U: mint-artwork
+    $ edit /etc/lightdm/lightdm.conf: set greeter-session=lightdm-slick-greeter in [Seat:*]
+
+[12/13] Firewall (ufw)  (system.firewall)
+    $ pacman -S --needed --noconfirm ufw
+    $ ufw default deny incoming
+    $ ufw default allow outgoing
+    $ ufw allow 22/tcp
+    $ ufw --force enable
+    $ systemctl enable --now ufw.service
+
+[13/13] Remove LibreOffice  (debloat.libreoffice)
+    $ pacman -Rns --noconfirm libreoffice* (installed ones only)
+
+A reboot is required afterwards.

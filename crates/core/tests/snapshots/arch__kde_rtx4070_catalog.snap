@@ -1,0 +1,19 @@
+---
+source: crates/core/tests/arch.rs
+expression: summarize(&catalog(&sys))
+---
+[x] System     arch.pacman-tweaks — Colorful pacman output
+[x] System     arch.multilib — Enable the multilib repository
+[x] System     system.update — Update the system
+[x] Tools      arch.build-tools — Build tools (base-devel, git)
+[x] Drivers    gpu.nvidia — NVIDIA driver (open kernel modules)
+[x] Multimedia gpu.nvidia-vaapi — Hardware video decoding on NVIDIA
+[x] Tools      arch.paru — paru AUR helper
+[x] Apps       flatpak.flathub — Flatpak with Flathub
+[x] Multimedia media.codecs — Media codecs and thumbnails
+[x] Multimedia media.player — Video player: MPC-QT + mpv
+[x] Tools      tools.archive — Archive tools
+[x] Apps       apps.firefox — Firefox
+[ ] System     system.firewall — Firewall (ufw)
+[ ] Debloat    debloat.kde — Remove KDE extras
+[ ] Debloat    debloat.libreoffice — Remove LibreOffice
