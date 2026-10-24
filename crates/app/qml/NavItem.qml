@@ -43,7 +43,7 @@ Rectangle {
         Text {
             anchors.verticalCenter: parent.verticalCenter
             text: root.label
-            color: root.selected ? Theme.text : "#cfd4d8"
+            color: root.selected ? Theme.text : Theme.textNav
             font.pixelSize: 16
             font.weight: root.selected ? Font.Medium : Font.Normal
         }

@@ -25,13 +25,10 @@ ListView {
         topPadding: kind === "task" ? 8 : 0
         // Steps are descriptions; the commands they run follow as `$ …` lines.
         text: kind === "task" ? "▸ " + line : kind === "step" ? "  → " + line : "    " + line
-        color: kind === "task" ? Theme.text : kind === "step" ? Theme.accent : kind === "error" ? Theme.error : kind === "stderr" ? Theme.warning : "#b4bac0"
+        color: kind === "task" ? Theme.text : kind === "step" ? Theme.accent : kind === "error" ? Theme.error : kind === "stderr" ? Theme.warning : Theme.textOutput
         font.family: Theme.monoFamily
         // Show tool output as printed: no `==>` turned into an arrow.
-        font.features: {
-            "calt": 0,
-            "liga": 0
-        }
+        font.preferShaping: false
         font.pixelSize: 13
         font.weight: kind === "task" ? Font.Bold : Font.Normal
         wrapMode: Text.WrapAnywhere

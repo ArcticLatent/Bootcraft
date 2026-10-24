@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["crates/app", "crates/core", "crates/helper"]
+members = ["crates/app", "crates/core", "crates/helper", "tools/manifest-signer"]
 
 [workspace.package]
 version = "0.1.0"
@@ -8,6 +8,8 @@ edition = "2024"
 license = "MIT"
 repository = "https://github.com/ArcticLatent/Bootcraft"
 authors = ["Burce Boran"]
+# Edition 2024 with let chains.
+rust-version = "1.88"
 
 [workspace.dependencies]
 base64 = "0.22"

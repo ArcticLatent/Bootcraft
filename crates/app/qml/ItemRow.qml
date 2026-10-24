@@ -24,15 +24,12 @@ Rectangle {
     signal toggled
 
     implicitHeight: Math.max(66, layout.implicitHeight + 22)
-    color: rowMouse.containsMouse ? Theme.alpha(Theme.text, 0.025) : "transparent"
+    color: rowMouse.hovered ? Theme.alpha(Theme.text, 0.025) : "transparent"
 
-    MouseArea {
+    // Hover only: just the check box ticks and unticks, so a stray click
+    // on the row can't change the plan.
+    HoverHandler {
         id: rowMouse
-        anchors.fill: parent
-        hoverEnabled: true
-        enabled: root.checkable
-        cursorShape: root.checkable ? Qt.PointingHandCursor : Qt.ArrowCursor
-        onClicked: root.toggled()
     }
 
     RowLayout {

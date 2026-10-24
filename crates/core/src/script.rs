@@ -24,17 +24,28 @@ pub struct Resolved {
     pub file_name: String,
 }
 
+/// Which file of a signed release a step installs.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ReleaseFile {
+    /// The distribution's package.
+    Package,
+    AppImage,
+}
+
 /// Look a signed release up with curl and verify its manifest, for
 /// [`to_script`]'s `resolve`.
-pub fn resolve_signed(distro: Distro) -> impl FnMut(&str, &str) -> Option<Resolved> {
-    move |manifest_url: &str, public_key: &str| {
+pub fn resolve_signed(distro: Distro) -> impl FnMut(&str, &str, ReleaseFile) -> Option<Resolved> {
+    move |manifest_url: &str, public_key: &str, file: ReleaseFile| {
         let out = std::process::Command::new("curl")
             .args(["-fsSL", "--max-time", "30", manifest_url])
             .output()
             .ok()
             .filter(|o| o.status.success())?;
         let manifest = crate::release::verify(&String::from_utf8_lossy(&out.stdout), public_key).ok()?;
-        let asset = crate::release::asset_for(&manifest, distro)?;
+        let asset = match file {
+            ReleaseFile::Package => crate::release::asset_for(&manifest, distro)?,
+            ReleaseFile::AppImage => crate::release::appimage_asset(&manifest)?,
+        };
         Some(Resolved {
             url: asset.download_url.clone(),
             sha256: asset.sha256.to_ascii_lowercase(),
@@ -49,7 +60,7 @@ pub fn to_script(
     plan: &Plan,
     root: &Path,
     exported: &str,
-    resolve: &mut dyn FnMut(&str, &str) -> Option<Resolved>,
+    resolve: &mut dyn FnMut(&str, &str, ReleaseFile) -> Option<Resolved>,
 ) -> String {
     let mut out = String::new();
     let distro = plan.distro;
@@ -199,7 +210,7 @@ fn step_script(
     step: &Step,
     distro: Distro,
     root: &Path,
-    resolve: &mut dyn FnMut(&str, &str) -> Option<Resolved>,
+    resolve: &mut dyn FnMut(&str, &str, ReleaseFile) -> Option<Resolved>,
 ) -> String {
     match step {
         Step::Install { packages, unless } => guarded(unless, &install_command(distro, packages)),
@@ -218,7 +229,7 @@ fn step_script(
             guarded(unless, &format!("aur_install {}\n", quoted(packages)))
         }
         Step::SignedPackage { package, manifest_url, public_key } => {
-            match resolve(manifest_url, public_key) {
+            match resolve(manifest_url, public_key, ReleaseFile::Package) {
                 Some(resolved) => {
                     let file = format!("/var/cache/bootcraft/downloads/{}", resolved.file_name);
                     let file_q = shell_quote(&file);
@@ -233,6 +244,41 @@ fn step_script(
                         sum = shell_quote(&format!("{}  {file}", resolved.sha256)),
                     );
                     guarded(std::slice::from_ref(package), &body)
+                }
+                None => format!(
+                    "echo {} >&2; exit 1\n",
+                    shell_quote(&format!(
+                        "Couldn't verify {package}'s signed release at export time; export again."
+                    ))
+                ),
+            }
+        }
+        Step::SignedAppImage { package, manifest_url, public_key, install } => {
+            match resolve(manifest_url, public_key, ReleaseFile::AppImage) {
+                Some(resolved) => {
+                    let file = format!("/var/cache/bootcraft/downloads/{}", resolved.file_name);
+                    let file_q = shell_quote(&file);
+                    let as_user = |from: &str, to: &Path, mode: &str| {
+                        format!(
+                            "runuser -u \"$user\" -- install -D -m {mode} {from} {}\n",
+                            shell_quote(&to.to_string_lossy())
+                        )
+                    };
+                    let body = format!(
+                        "# Pinned to the checksum from the release's signed manifest at export time;\n# installed for you, so the app can update itself.\n[[ -n $user ]] || {{ echo 'Run this with sudo from your account.' >&2; exit 1; }}\nmkdir -p /var/cache/bootcraft/downloads\ncurl -fL -o {file_q} {url}\necho {sum} | sha256sum -c -\n{app}printf '%s' {desktop} | {entry}printf '%s' {icon_svg} | {icon}",
+                        url = shell_quote(&resolved.url),
+                        sum = shell_quote(&format!("{}  {file}", resolved.sha256)),
+                        app = as_user(&file_q, &install.path, "755"),
+                        desktop = shell_quote(&install.desktop),
+                        entry = as_user("/dev/stdin", &install.desktop_entry, "644"),
+                        icon_svg = shell_quote(&install.icon_svg),
+                        icon = as_user("/dev/stdin", &install.icon, "644"),
+                    );
+                    format!(
+                        "if [[ ! -f {} ]]; then\n  {}\nfi\n",
+                        shell_quote(&install.path.to_string_lossy()),
+                        body.trim_end().replace('\n', "\n  ")
+                    )
                 }
                 None => format!(
                     "echo {} >&2; exit 1\n",
@@ -333,7 +379,7 @@ mod tests {
         }
     }
 
-    fn no_resolve(_: &str, _: &str) -> Option<Resolved> {
+    fn no_resolve(_: &str, _: &str, _: ReleaseFile) -> Option<Resolved> {
         None
     }
 
@@ -415,7 +461,7 @@ mod tests {
             public_key: "k".into(),
         };
         let root = tempfile::tempdir().unwrap();
-        let mut resolve = |_: &str, _: &str| {
+        let mut resolve = |_: &str, _: &str, _: ReleaseFile| {
             Some(Resolved {
                 url: "https://x/c.pkg.tar.zst".into(),
                 sha256: "ff".repeat(32),
@@ -429,5 +475,37 @@ mod tests {
         );
         let failing = to_script(&plan_of(Distro::Arch, vec![step]), root.path(), "today", &mut no_resolve);
         assert!(failing.contains("verify comfypilot") && failing.contains("exit 1"));
+    }
+
+    #[test]
+    fn appimages_are_installed_as_the_user() {
+        let step = Step::SignedAppImage {
+            package: "comfypilot".into(),
+            manifest_url: "m".into(),
+            public_key: "k".into(),
+            install: crate::task::AppImageInstall {
+                path: "/home/alice/Applications/ComfyPilot.AppImage".into(),
+                desktop_entry: "/home/alice/.local/share/applications/cp.desktop".into(),
+                desktop: "[Desktop Entry]\nName=ComfyPilot's\nExec=\"/home/alice/Applications/ComfyPilot.AppImage\"\n"
+                    .into(),
+                icon: "/home/alice/.local/share/icons/hicolor/scalable/apps/cp.svg".into(),
+                icon_svg: "<svg xmlns='http://www.w3.org/2000/svg'/>".into(),
+            },
+        };
+        let root = tempfile::tempdir().unwrap();
+        let mut resolve = |_: &str, _: &str, file: ReleaseFile| {
+            assert_eq!(file, ReleaseFile::AppImage);
+            Some(Resolved {
+                url: "https://x/ComfyPilot-1.0.0-x86_64.AppImage".into(),
+                sha256: "ff".repeat(32),
+                file_name: "ComfyPilot-1.0.0-x86_64.AppImage".into(),
+            })
+        };
+        let script = to_script(&plan_of(Distro::Ubuntu, vec![step]), root.path(), "today", &mut resolve);
+        assert_parses(&script);
+        assert!(script.contains(
+            "runuser -u \"$user\" -- install -D -m 755 /var/cache/bootcraft/downloads/ComfyPilot-1.0.0-x86_64.AppImage /home/alice/Applications/ComfyPilot.AppImage"
+        ), "{script}");
+        assert!(script.contains("if [[ ! -f /home/alice/Applications/ComfyPilot.AppImage ]]; then"));
     }
 }

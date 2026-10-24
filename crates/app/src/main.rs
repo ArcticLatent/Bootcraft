@@ -10,6 +10,7 @@ mod helper;
 mod icons;
 mod qt_app;
 mod sizes;
+mod update;
 
 use cxx_qt_lib::{QGuiApplication, QQmlApplicationEngine, QString, QUrl};
 
@@ -30,6 +31,7 @@ fn main() {
         unsafe { std::env::set_var("QT_QPA_PLATFORMTHEME", "xdgdesktopportal") };
     }
 
+    qt_app::set_app_id();
     let mut app = QGuiApplication::new();
     if let Some(mut app) = app.as_mut() {
         app.as_mut().set_application_name(&QString::from("Bootcraft"));

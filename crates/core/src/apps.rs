@@ -4,7 +4,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::system::{Distro, System};
-use crate::task::Step;
+use crate::task::{AppImageInstall, Step};
 
 /// Groups on the Applications page.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize)]
@@ -93,8 +93,9 @@ pub enum Via {
     RpmFusion,
     /// Arch: built from the AUR.
     Aur,
-    /// A package from a signed `linux-release.json` (see [`crate::release`]).
-    SignedRelease { manifest_url: String, public_key: String },
+    /// A package from a signed `linux-release.json` (see [`crate::release`]),
+    /// or its AppImage where the package can't be installed.
+    SignedRelease { manifest_url: String, public_key: String, appimage: Option<AppImageInstall> },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -118,6 +119,8 @@ pub struct App {
     pub native: Option<NativePkg>,
     pub policy: Policy,
     pub notes: Vec<String>,
+    /// The app's icon (SVG) for apps that aren't on Flathub.
+    pub icon_svg: Option<&'static str>,
 }
 
 /// The source an app will be installed from, and why, for the UI badge.
@@ -187,11 +190,19 @@ impl App {
                 let mut steps = vec![match &native.via {
                     Via::Repo | Via::RpmFusion => Step::Install { packages, unless: Vec::new() },
                     Via::Aur => Step::AurInstall { packages, unless: Vec::new() },
-                    Via::SignedRelease { manifest_url, public_key } => Step::SignedPackage {
+                    Via::SignedRelease { manifest_url, public_key, appimage: None } => Step::SignedPackage {
                         package: packages.join(" "),
                         manifest_url: manifest_url.clone(),
                         public_key: public_key.clone(),
                     },
+                    Via::SignedRelease { manifest_url, public_key, appimage: Some(install) } => {
+                        Step::SignedAppImage {
+                            package: packages.join(" "),
+                            manifest_url: manifest_url.clone(),
+                            public_key: public_key.clone(),
+                            install: install.clone(),
+                        }
+                    }
                 }];
                 steps.extend(native.services.iter().map(|unit| Step::EnableService { unit: unit.clone() }));
                 Some(steps)

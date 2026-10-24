@@ -119,6 +119,7 @@ impl Probe {
             Step::SignedPackage { package, .. } | Step::Swap { to: package, .. } => {
                 self.is_installed(package)
             }
+            Step::SignedAppImage { install, .. } => Some(self.rooted(&install.path).is_file()),
             Step::WriteFile { path, contents } => Some(self.read(path).is_some_and(|text| &text == contents)),
             Step::Download { path, sha256, .. } => Some(
                 crate::release::sha256_file(&self.rooted(path))

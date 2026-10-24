@@ -13,6 +13,7 @@ use bootcraft_core::catalog::catalog;
 use bootcraft_core::detect::{Env, detect};
 use bootcraft_core::exec::{Executor, SystemRunner, User};
 use bootcraft_core::protocol::{Control, Event, Outcome, Request};
+use bootcraft_core::release;
 use bootcraft_core::{Plan, Selection, System, plan};
 
 /// `bootcraft-helper apply`: run a plan from a terminal (under sudo).
@@ -129,6 +130,59 @@ pub fn serve(root: &Path) -> ExitCode {
     log.write(&finished);
     send(&finished);
     if summary.ok { ExitCode::SUCCESS } else { ExitCode::FAILURE }
+}
+
+/// `bootcraft-helper self-update`: the app's "Install the update" for the
+/// .deb, .rpm and Arch packages, started through pkexec. Fetches Bootcraft's
+/// own release manifest (a fixed URL, nothing from the caller), checks its
+/// signature, and installs the package if it is newer than this helper.
+/// Prints [`Event`] lines: output, then `finished` or `error`.
+pub fn self_update(root: &Path) -> ExitCode {
+    let send = |event: &Event| {
+        let mut out = io::stdout().lock();
+        let _ = serde_json::to_writer(&mut out, event);
+        let _ = out.write_all(b"\n");
+        let _ = out.flush();
+    };
+    let fail = |message: String| {
+        send(&Event::Error { message });
+        ExitCode::FAILURE
+    };
+    if root != Path::new("/") {
+        return fail("--root cannot be used with self-update".into());
+    }
+    if !is_root() {
+        return fail("the update must be installed as root: sudo bootcraft-helper self-update".into());
+    }
+    let sys = detect(root, &Env::from_process());
+    let Some(mut executor) = Executor::new(root, &sys, SystemRunner, None) else {
+        return fail(format!("{} is not supported", sys.os.pretty_name));
+    };
+    let mut log = Log::create(root);
+    let result = executor.update_from_release(
+        release::BOOTCRAFT_MANIFEST,
+        release::ARCTIC_RELEASE_PUBLIC_KEY,
+        env!("CARGO_PKG_VERSION"),
+        &mut |event| {
+            log.write(&event);
+            send(&event);
+        },
+    );
+    match result {
+        Ok(version) => {
+            send(&Event::Output { line: format!("Bootcraft {version} is installed.") });
+            let finished = Event::Finished { ok: true, reboot: false, log: log.path_string() };
+            log.write(&finished);
+            send(&finished);
+            ExitCode::SUCCESS
+        }
+        Err(message) => {
+            let error = Event::Error { message };
+            log.write(&error);
+            send(&error);
+            ExitCode::FAILURE
+        }
+    }
 }
 
 fn confirm(prompt: &str) -> bool {

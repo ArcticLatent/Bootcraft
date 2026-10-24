@@ -64,6 +64,10 @@ enum Command {
     /// Speak the JSON-lines protocol on stdin/stdout (used by the app via pkexec).
     #[command(hide = true)]
     Serve,
+    /// Install Bootcraft's latest signed release over this one, if it is newer
+    /// (used by the app via pkexec; prints JSON-lines events).
+    #[command(hide = true)]
+    SelfUpdate,
     /// List every package name the catalog can install on this distribution,
     /// across GPUs and desktops, as `<source> <name>` lines (for checking
     /// them against the real repositories; see scripts/check-packages.sh).
@@ -120,6 +124,9 @@ fn main() -> ExitCode {
     if matches!(cli.command, Command::Serve) {
         // serve detects for itself, with the desktop the app sends.
         return run::serve(&cli.root);
+    }
+    if matches!(cli.command, Command::SelfUpdate) {
+        return run::self_update(&cli.root);
     }
     let mut sys = detect(&cli.root, &Env::from_process());
     if let Some(desktop) = &cli.desktop {
@@ -179,7 +186,7 @@ fn main() -> ExitCode {
                 }
             };
         }
-        Command::Serve => unreachable!("handled above"),
+        Command::Serve | Command::SelfUpdate => unreachable!("handled above"),
         Command::Packages => {
             for line in packages::all(&sys) {
                 println!("{line}");

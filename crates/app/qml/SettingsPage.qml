@@ -129,6 +129,50 @@ Flickable {
         }
 
         Section {
+            title: "Updates"
+            description: {
+                if (Setup.updateMessage !== "")
+                    return Setup.updateMessage;
+                if (Setup.updateAvailable)
+                    return "Bootcraft " + Setup.updateVersion + " is available (you have " + Qt.application.version + "). "
+                        + (Setup.updateKind === "manual" ? "This copy wasn't installed from a package or an AppImage; get it from the release page."
+                            : "Bootcraft downloads it, checks its signature and restarts." + (Setup.updateKind === "package" ? " Installing it asks for your password." : ""));
+                return "Bootcraft " + Qt.application.version + ". New versions are checked for when Bootcraft starts, and only installed when you choose to.";
+            }
+
+            RowLayout {
+                Layout.topMargin: 6
+                spacing: 16
+
+                PrimaryButton {
+                    visible: Setup.updateAvailable
+                    compact: true
+                    enabled: !Setup.updating && !Setup.busy
+                    label: Setup.updateState === "installing" ? "Installing…" : Setup.updateKind === "manual" ? "Open the release page" : "Install " + Setup.updateVersion
+                    icon: Setup.updateKind === "manual" ? "arrow-right" : "download"
+                    onClicked: Setup.installUpdate()
+                }
+
+                PrimaryButton {
+                    secondary: true
+                    enabled: !Setup.updating
+                    label: Setup.updateState === "checking" ? "Checking…" : "Check for updates"
+                    icon: "refresh-cw"
+                    onClicked: Setup.checkUpdates(false)
+                }
+
+                LinkButton {
+                    visible: Setup.updatePage !== ""
+                    label: "What's new"
+                    icon: "arrow-right"
+                    iconAfter: true
+                    fontSize: 14
+                    onClicked: Qt.openUrlExternally(Setup.updatePage)
+                }
+            }
+        }
+
+        Section {
             title: "About Bootcraft"
             description: "Version " + Qt.application.version + ". Setup logs are kept in /var/log/bootcraft; app icons are cached in ~/.cache/bootcraft/icons."
 

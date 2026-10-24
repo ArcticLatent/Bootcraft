@@ -1,0 +1,20 @@
+[package]
+name = "bootcraft-manifest-signer"
+description = "Signs and verifies Bootcraft's release manifest. Release-time tooling only; not shipped."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+publish = false
+
+[[bin]]
+name = "manifest-signer"
+path = "src/main.rs"
+
+[dependencies]
+base64.workspace = true
+bootcraft-core.workspace = true
+ed25519-dalek.workspace = true
+# keygen reads the OS's random generator directly.
+getrandom = "0.3"
+serde_json.workspace = true

@@ -2,6 +2,8 @@
 
 use std::path::Path;
 
+use base64::Engine;
+use base64::engine::general_purpose::STANDARD;
 use bootcraft_core::apps::{Preference, Via};
 use bootcraft_core::catalog::{PACKS, catalog};
 use bootcraft_core::detect::{Env, detect};
@@ -22,6 +24,8 @@ pub fn dispatch(command: &str, args: &Value) -> Result<Value, String> {
         "cancel" => crate::helper::cancel(),
         "app_icons" => Ok(crate::icons::fetch(args)),
         "reboot" => reboot(),
+        "check_update" => crate::update::check(),
+        "install_update" => crate::update::install(),
         other => Err(format!("unknown command `{other}`")),
     }
 }
@@ -171,6 +175,7 @@ fn catalog_info(sys: &System, preference: Preference) -> Value {
                     "packages": n.packages,
                 })),
                 "notes": a.notes,
+                "icon": a.icon_svg.map(|svg| format!("data:image/svg+xml;base64,{}", STANDARD.encode(svg))),
                 "available": a.available(),
                 "choice": choice,
                 "status": installed,

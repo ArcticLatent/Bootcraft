@@ -1,5 +1,7 @@
 //! What Bootcraft knows about the machine it runs on.
 
+use std::path::PathBuf;
+
 use serde::Serialize;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -64,6 +66,19 @@ impl OsInfo {
             Distro::Ubuntu => matches!(version, "24.04" | "26.04"),
             Distro::Mint => major.is_some_and(|m| m >= 22),
             Distro::Debian => major == Some(13),
+        }
+    }
+
+    /// Ubuntu 24.04 and Mint 22 have Qt 6.4, older than the .deb packages of
+    /// Arctic Latent's apps need (they're built on Debian 13): those apps
+    /// come as AppImages there.
+    pub fn qt_too_old_for_debs(&self) -> bool {
+        let version = self.version_id.as_deref().unwrap_or("");
+        let major = version.split('.').next().and_then(|m| m.parse::<u32>().ok());
+        match self.distro() {
+            Some(Distro::Ubuntu) => major.is_some_and(|m| m < 26),
+            Some(Distro::Mint) => major.is_some_and(|m| m < 23),
+            _ => false,
         }
     }
 }
@@ -231,6 +246,8 @@ pub struct System {
     pub disk_free_bytes: Option<u64>,
     /// The person setting up the machine (not root), when known.
     pub user: Option<String>,
+    /// Their home folder, from the passwd file.
+    pub home: Option<PathBuf>,
 }
 
 impl System {

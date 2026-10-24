@@ -1,4 +1,5 @@
 import Bootcraft
+import QtCore
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
@@ -7,7 +8,8 @@ ApplicationWindow {
     id: window
 
     /// Development: `--screenshot=<file>` saves the window once loaded and quits;
-    /// `--page=<n>` opens a page first.
+    /// `--page=<n>` opens a page first, `--theme=light|dark` picks the theme
+    /// and `--accent=<distro>` another distribution's colour.
     readonly property string screenshotPath: argument("--screenshot=")
 
     function argument(prefix) {
@@ -24,6 +26,46 @@ ApplicationWindow {
     color: Theme.canvas
     font.family: Theme.fontFamily
     font.pixelSize: 14
+    // Basic-style defaults (tool tips, menus, scroll bars) in the theme's colours.
+    palette.window: Theme.canvas
+    palette.windowText: Theme.text
+    palette.base: Theme.raised
+    palette.alternateBase: Theme.well
+    palette.text: Theme.text
+    palette.button: Theme.raised
+    palette.buttonText: Theme.text
+    palette.brightText: Theme.text
+    palette.highlight: Theme.accent
+    palette.highlightedText: Theme.accentText
+    palette.placeholderText: Theme.textFaint
+    palette.toolTipBase: Theme.raised
+    palette.toolTipText: Theme.text
+    palette.light: Theme.raisedHover
+    palette.midlight: Theme.border
+    palette.mid: Theme.borderStrong
+    palette.dark: Theme.textFaint
+    palette.shadow: "#000000"
+
+    // The window's own state, kept between runs.
+    Settings {
+        id: windowSettings
+        category: "window"
+
+        /// "dark" or "light" (the sidebar's switcher).
+        property string theme: "dark"
+    }
+
+    Binding {
+        target: Theme
+        property: "mode"
+        value: windowSettings.theme === "light" ? "light" : "dark"
+    }
+
+    Binding {
+        target: Theme
+        property: "distro"
+        value: window.argument("--accent=") || (Setup.system && Setup.system.distro ? Setup.system.distro : "")
+    }
 
     // The canvas is drawn here too, so screenshots of `root` aren't transparent.
     Rectangle {
@@ -37,6 +79,7 @@ ApplicationWindow {
 
         Sidebar {
             Layout.fillHeight: true
+            onThemeToggled: windowSettings.theme = Theme.isLight ? "dark" : "light"
         }
 
         ColumnLayout {
@@ -64,6 +107,9 @@ ApplicationWindow {
     }
 
     Component.onCompleted: {
+        const theme = argument("--theme=");
+        if (theme)
+            windowSettings.theme = theme;
         const page = parseInt(argument("--page="));
         if (!isNaN(page))
             Setup.page = page;
@@ -71,8 +117,20 @@ ApplicationWindow {
         if (packs)
             Setup.packs = packs.split(",");
         Setup.load();
+        // Screenshots skip the update check, unless `--check-updates` asks for it now.
+        if (Qt.application.arguments.indexOf("--check-updates") >= 0)
+            Setup.checkUpdates(false);
+        else if (screenshotPath === "")
+            updateCheck.start();
         if (Qt.application.arguments.indexOf("--demo-run") >= 0)
             demoRun.start();
+    }
+
+    // A quiet update check a little after startup.
+    Timer {
+        id: updateCheck
+        interval: 4000
+        onTriggered: Setup.checkUpdates(true)
     }
 
     // Development: `--demo-run` plays sample helper events through the real

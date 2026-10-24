@@ -62,6 +62,18 @@ QtObject {
     /// Sidebar page: 0 Overview, 1 Applications, 2 System setup, 3 Activity, 4 Settings.
     property int page: 0
 
+    // ---- updates (Bootcraft's own) ---------------------------------------------
+    /// "idle", "checking", "current", "available", "installing" or "failed".
+    property string updateState: "idle"
+    property bool updateAvailable: false
+    property string updateVersion: ""
+    /// The release's GitHub page.
+    property string updatePage: ""
+    /// How this copy updates: "appimage", "package" or "manual" (the release page).
+    property string updateKind: ""
+    property string updateMessage: ""
+    readonly property bool updating: updateState === "checking" || updateState === "installing"
+
     property Timer _replanTimer: Timer {
         interval: 120
         onTriggered: setup._replan()
@@ -80,6 +92,15 @@ QtObject {
                 "line": e.line
             }));
         Api.on("helper-exit", e => setup._onExit(e));
+        Api.on("update-event", e => setup._onUpdate(e));
+        Api.on("update-exit", e => {
+            if (e.ok && e.restart)
+                return Qt.quit();
+            setup.updateState = e.ok ? "current" : "failed";
+            setup.updateMessage = e.ok ? "Bootcraft " + setup.updateVersion + " is installed; open Bootcraft again to use it." : e.message;
+            if (e.ok)
+                setup.updateAvailable = false;
+        });
         Api.on("app-icon", e => {
             const icons = Object.assign({}, setup.appIcons);
             icons[e.id] = e.url;
@@ -310,7 +331,7 @@ QtObject {
 
     // ---- running ---------------------------------------------------------------
     function start() {
-        if (busy || !plan)
+        if (busy || !plan || updateState === "installing")
             return;
         runTasks = plan.tasks.map(t => ({
                     "id": t.id,
@@ -408,5 +429,61 @@ QtObject {
         }
         // Statuses (installed, done) changed.
         reloadCatalog();
+    }
+
+    // ---- updating Bootcraft ----------------------------------------------------
+    /// `quiet` (the check at startup) keeps "no update" and errors to itself.
+    function checkUpdates(quiet) {
+        if (updating)
+            return;
+        updateState = "checking";
+        updateMessage = "";
+        Api.call("check_update", {}).then(r => {
+            setup.updateAvailable = r.available;
+            setup.updateVersion = r.version;
+            setup.updatePage = r.page;
+            setup.updateKind = r.kind;
+            setup.updateState = r.available ? "available" : "current";
+            setup.updateMessage = r.available || quiet ? "" : "You have the latest version.";
+        }).catch(e => {
+            setup.updateState = quiet ? "idle" : "failed";
+            setup.updateMessage = quiet ? "" : String(e);
+        });
+    }
+
+    /// Download and install the newer version; Bootcraft then restarts.
+    function installUpdate() {
+        if (!updateAvailable || updating || busy)
+            return;
+        if (updateKind === "manual") {
+            Qt.openUrlExternally(updatePage);
+            return;
+        }
+        updateState = "installing";
+        updateMessage = "Installing Bootcraft " + updateVersion + "…";
+        Api.call("install_update", {}).then(r => {
+            if (r && r.restart)
+                Qt.quit();
+        }).catch(e => {
+            setup.updateState = "failed";
+            setup.updateMessage = String(e);
+        });
+    }
+
+    function _onUpdate(e) {
+        if (e.event === "output") {
+            log.append({
+                "kind": "output",
+                "line": e.line
+            });
+            updateMessage = e.line;
+        } else if (e.event === "error") {
+            log.append({
+                "kind": "error",
+                "line": e.message
+            });
+            updateState = "failed";
+            updateMessage = e.message;
+        }
     }
 }

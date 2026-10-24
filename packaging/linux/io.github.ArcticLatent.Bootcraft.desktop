@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Bootcraft
+GenericName=Post-install Setup
+Comment=Set up drivers, codecs and apps after installing Linux
+Exec=bootcraft
+Icon=io.github.ArcticLatent.Bootcraft
+Terminal=false
+Categories=System;
+Keywords=setup;post-install;drivers;NVIDIA;codecs;Flatpak;apps;
+StartupNotify=true

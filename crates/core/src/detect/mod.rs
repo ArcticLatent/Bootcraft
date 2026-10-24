@@ -7,7 +7,7 @@ mod gpu;
 mod os_release;
 
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use crate::system::{Desktop, SecureBoot, SessionType, System};
@@ -92,7 +92,17 @@ pub fn detect(root: &Path, env: &Env) -> System {
         memory_bytes: memory(root),
         disk_free_bytes: rustix::fs::statvfs(root).ok().map(|fs| fs.f_bavail.saturating_mul(fs.f_frsize)),
         user: env.user.clone(),
+        home: env.user.as_deref().and_then(|user| home_of(root, user)),
     }
+}
+
+/// `user`'s home folder in `<root>/etc/passwd`.
+fn home_of(root: &Path, user: &str) -> Option<PathBuf> {
+    let passwd = fs::read_to_string(root.join("etc/passwd")).ok()?;
+    passwd.lines().find_map(|line| {
+        let fields: Vec<&str> = line.split(':').collect();
+        (fields.len() >= 6 && fields[0] == user).then(|| PathBuf::from(fields[5]))
+    })
 }
 
 /// `MemTotal` from /proc/meminfo, which is in kibibytes.

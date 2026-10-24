@@ -1,15 +1,16 @@
 import Bootcraft
 import QtQuick
 
-// An app's own icon from Flathub once it is cached, else the Lucide icon
-// for its section on a tile. Also used for task icons (`icon` set, no `app`).
+// An app's own icon: from the catalog for apps that aren't on Flathub, else
+// from Flathub once it is cached, else the Lucide icon for its section on a
+// tile. Also used for task icons (`icon` set, no `app`).
 Item {
     id: root
 
     property var app: null
     property string icon: ""
     property int size: 36
-    readonly property string url: app ? (Setup.appIcons[app.id] || "") : ""
+    readonly property string url: app ? (app.icon || Setup.appIcons[app.id] || "") : ""
 
     implicitWidth: size
     implicitHeight: size

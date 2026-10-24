@@ -5,9 +5,12 @@
 //! package is listed only where the distribution's own repositories (or RPM
 //! Fusion, or the AUR) have it on every supported release.
 
+use std::path::Path;
+
 use crate::apps::{App, FlatpakRef, NativePkg, Policy, Section, Via};
 use crate::catalog::{COMFYPILOT_MANIFEST, COMFYPILOT_PUBLIC_KEY};
 use crate::system::{Distro, GpuVendor, System};
+use crate::task::AppImageInstall;
 
 /// A workflow card. Packs stack on top of Essentials; `apps` lists
 /// `(app id, ticked by default)`.
@@ -129,6 +132,50 @@ enum Platform {
     Mint,
 }
 
+/// The menu entry of an app installed as an AppImage.
+struct DesktopEntry {
+    app_id: &'static str,
+    name: &'static str,
+    generic_name: &'static str,
+    comment: &'static str,
+    categories: &'static str,
+    file_name: &'static str,
+    icon_svg: &'static str,
+}
+
+impl DesktopEntry {
+    fn install(&self, home: &Path) -> AppImageInstall {
+        let path = home.join("Applications").join(self.file_name);
+        let desktop = format!(
+            "[Desktop Entry]\nType=Application\nName={}\nGenericName={}\nComment={}\nExec=\"{}\"\nIcon={}\nTerminal=false\nCategories={}\nStartupNotify=true\n",
+            self.name,
+            self.generic_name,
+            self.comment,
+            path.display(),
+            self.app_id,
+            self.categories,
+        );
+        AppImageInstall {
+            path,
+            desktop_entry: home.join(format!(".local/share/applications/{}.desktop", self.app_id)),
+            desktop,
+            icon: home.join(format!(".local/share/icons/hicolor/scalable/apps/{}.svg", self.app_id)),
+            icon_svg: self.icon_svg.into(),
+        }
+    }
+}
+
+/// ComfyPilot's own menu entry (its packaging/linux), for its AppImage.
+const COMFYPILOT_ENTRY: DesktopEntry = DesktopEntry {
+    app_id: "io.github.ArcticLatent.ComfyPilot",
+    name: "ComfyPilot",
+    generic_name: "ComfyUI Manager",
+    comment: "Install and run ComfyUI, and download models, LoRAs and workflows",
+    categories: "Graphics;",
+    file_name: "ComfyPilot.AppImage",
+    icon_svg: include_str!("../../assets/comfypilot.svg"),
+};
+
 struct Builder {
     app: App,
     platform: Option<Platform>,
@@ -158,6 +205,7 @@ fn app(
             native: None,
             policy: Policy::Either,
             notes: Vec::new(),
+            icon_svg: None,
         },
         platform,
     }
@@ -222,10 +270,31 @@ impl Builder {
         self.on(&[Debian, Ubuntu, Mint], Via::Repo, packages)
     }
 
-    fn signed_release(self, package: &str, manifest_url: &str, public_key: &str) -> Self {
+    /// An app from its signed release: the package for this distribution,
+    /// or where Qt is too old for it, the AppImage in the user's home (not
+    /// offered when Bootcraft can't tell whose home that is).
+    fn signed_release(
+        self,
+        sys: &System,
+        package: &str,
+        manifest_url: &str,
+        public_key: &str,
+        entry: &DesktopEntry,
+    ) -> Self {
         use Platform::*;
-        let via = Via::SignedRelease { manifest_url: manifest_url.into(), public_key: public_key.into() };
+        let appimage = match (&sys.home, sys.os.qt_too_old_for_debs()) {
+            (_, false) => None,
+            (Some(home), true) => Some(entry.install(home)),
+            (None, true) => return self,
+        };
+        let via =
+            Via::SignedRelease { manifest_url: manifest_url.into(), public_key: public_key.into(), appimage };
         self.on(&[Arch, Fedora, Debian, Ubuntu, Mint], via, &[package])
+    }
+
+    fn icon_svg(mut self, svg: &'static str) -> Self {
+        self.app.icon_svg = Some(svg);
+        self
     }
 
     /// Tasks the native package needs on Arch, e.g. multilib for `lib32-*`.
@@ -469,7 +538,8 @@ pub fn apps(sys: &System) -> Vec<App> {
             .deb(&["golang-go"])
             .build(),
         app(sys, "comfypilot", "ComfyPilot", "Install and run ComfyUI the easy way", Ai)
-            .signed_release("comfypilot", COMFYPILOT_MANIFEST, COMFYPILOT_PUBLIC_KEY)
+            .signed_release(sys, "comfypilot", COMFYPILOT_MANIFEST, COMFYPILOT_PUBLIC_KEY, &COMFYPILOT_ENTRY)
+            .icon_svg(COMFYPILOT_ENTRY.icon_svg)
             .note("By Arctic Latent. Installed from its signed GitHub release; it updates itself.")
             .build(),
         app(sys, "ollama", "Ollama", "Run local language models", Ai)

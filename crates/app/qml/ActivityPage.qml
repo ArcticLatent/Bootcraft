@@ -146,7 +146,7 @@ Item {
                         width: tasks.width
                         height: Math.max(48, taskColumn.implicitHeight + 20)
                         radius: 6
-                        color: modelData.state === "running" ? Theme.navSelected : "transparent"
+                        color: modelData.state === "running" ? Theme.accentSoft : "transparent"
 
                         RowLayout {
                             anchors.fill: parent

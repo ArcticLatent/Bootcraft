@@ -60,6 +60,12 @@ Flickable {
                 font.pixelSize: 15
                 leftPadding: 42
                 onTextChanged: page.query = text
+                // Development: `--search=<text>` starts with a search (screenshots).
+                Component.onCompleted: {
+                    const arg = Qt.application.arguments.find(a => a.startsWith("--search="));
+                    if (arg)
+                        text = arg.slice("--search=".length);
+                }
                 background: Rectangle {
                     implicitHeight: 42
                     radius: 8

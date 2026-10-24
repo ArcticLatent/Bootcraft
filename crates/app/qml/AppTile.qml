@@ -3,7 +3,7 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 
-// An app in the Applications grid. Click anywhere to pick it.
+// An app in the Applications grid; the check box picks it.
 Rectangle {
     id: tile
 
@@ -12,19 +12,16 @@ Rectangle {
 
     implicitHeight: 108
     radius: Theme.radius
-    color: checked ? Theme.accentSoft : mouse.containsMouse ? Theme.raisedHover : Theme.raised
+    color: checked ? Theme.accentSoft : mouse.hovered ? Theme.raisedHover : Theme.raised
     border.color: checked ? Theme.alpha(Theme.accent, 0.7) : Theme.border
 
     Behavior on color {
         ColorAnimation { duration: Theme.motion }
     }
 
-    MouseArea {
+    // Hover only: just the check box ticks and unticks.
+    HoverHandler {
         id: mouse
-        anchors.fill: parent
-        hoverEnabled: true
-        cursorShape: Qt.PointingHandCursor
-        onClicked: Setup.toggleApp(tile.app.id)
     }
 
     ColumnLayout {
@@ -118,7 +115,7 @@ Rectangle {
     }
 
     ToolTip {
-        visible: mouse.containsMouse && tile.app.notes.length > 0
+        visible: mouse.hovered && tile.app.notes.length > 0
         delay: 500
         width: Math.min(360, implicitWidth)
         contentItem: Text {

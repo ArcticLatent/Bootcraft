@@ -119,6 +119,20 @@ pub const APT_GET: &[&str] = &[
     "DPkg::Lock::Timeout=300",
 ];
 
+/// Where an app's AppImage goes: in the home folder of the person setting up
+/// the machine and owned by them, so the app can replace it when it updates
+/// itself, with a menu entry and its icon.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct AppImageInstall {
+    pub path: PathBuf,
+    pub desktop_entry: PathBuf,
+    #[serde(skip)]
+    pub desktop: String,
+    pub icon: PathBuf,
+    #[serde(skip)]
+    pub icon_svg: String,
+}
+
 /// One unit of work. Steps are data so the full plan can be reviewed before
 /// anything runs, and so the helper never executes a shell string.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -147,6 +161,9 @@ pub enum Step {
     /// (see [`crate::release`]), check the signature and the file's SHA-256,
     /// then install it with the package manager.
     SignedPackage { package: String, manifest_url: String, public_key: String },
+    /// The AppImage from such a release, installed for the person setting up
+    /// the machine (see [`AppImageInstall`]).
+    SignedAppImage { package: String, manifest_url: String, public_key: String, install: AppImageInstall },
     /// Add a Flatpak remote system-wide.
     FlatpakRemote { name: String, url: String },
     /// Install Flatpak apps system-wide.
@@ -269,6 +286,11 @@ impl Step {
             Self::SignedPackage { package, manifest_url, .. } => {
                 format!("download {package} from its signed release ({manifest_url}), verify it, install it")
             }
+            Self::SignedAppImage { package, manifest_url, install, .. } => format!(
+                "download {package}'s AppImage from its signed release ({manifest_url}), verify it, \
+                 install it as {} with a menu entry",
+                install.path.display()
+            ),
             Self::FlatpakRemote { name, url } => {
                 format!("flatpak remote-add --if-not-exists --system {name} {url}")
             }

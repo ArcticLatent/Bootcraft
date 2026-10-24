@@ -24,7 +24,7 @@ use crate::probe::{Probe, Status};
 use crate::protocol::{Event, Outcome, PlanEntry};
 use crate::release;
 use crate::system::{Distro, System};
-use crate::task::{APT_GET, Step};
+use crate::task::{APT_GET, AppImageInstall, Step};
 
 pub struct Summary {
     pub ok: bool,
@@ -196,6 +196,13 @@ impl<R: Runner> Executor<R> {
                     return Ok(());
                 }
                 self.signed_package(manifest_url, public_key, emit)
+            }
+            Step::SignedAppImage { package, manifest_url, public_key, install } => {
+                if self.root.join(install.path.strip_prefix("/").unwrap_or(&install.path)).is_file() {
+                    note(emit, &format!("{package} is already installed."));
+                    return Ok(());
+                }
+                self.signed_appimage(manifest_url, public_key, install, emit)
             }
             Step::FlatpakRemote { name, url } => self.run(
                 Cmd::new([
@@ -526,6 +533,77 @@ impl<R: Runner> Executor<R> {
         public_key: &str,
         emit: &mut dyn FnMut(Event),
     ) -> Result<(), StepError> {
+        let manifest = self.fetch_release(manifest_url, public_key, emit)?;
+        let asset = self.package_asset(&manifest)?;
+        let file = self.download_asset(&asset, emit)?;
+        self.install_file(file, emit)
+    }
+
+    /// Bootcraft updating itself from its release (`bootcraft-helper
+    /// self-update`): a signed package as above, but only a newer version than
+    /// `current`, installed over it. Returns the new version.
+    pub fn update_from_release(
+        &mut self,
+        manifest_url: &str,
+        public_key: &str,
+        current: &str,
+        emit: &mut dyn FnMut(Event),
+    ) -> Result<String, StepError> {
+        let manifest = self.fetch_release(manifest_url, public_key, emit)?;
+        if !release::is_newer(&manifest.version, current) {
+            return Err(format!("{} is not newer than the installed {current}", manifest.version));
+        }
+        let asset = self.package_asset(&manifest)?;
+        let file = self.download_asset(&asset, emit)?;
+        self.install_file(file, emit)?;
+        Ok(manifest.version)
+    }
+
+    /// The AppImage from a signed release, put in place as the user it is
+    /// for (see [`AppImageInstall`]) with its menu entry and icon.
+    fn signed_appimage(
+        &mut self,
+        manifest_url: &str,
+        public_key: &str,
+        install: &AppImageInstall,
+        emit: &mut dyn FnMut(Event),
+    ) -> Result<(), StepError> {
+        let user = self.user.clone().ok_or(
+            "the AppImage goes into your home folder, but Bootcraft couldn't tell which account \
+             is yours; start it from your account (it asks for the password itself)",
+        )?;
+        let manifest = self.fetch_release(manifest_url, public_key, emit)?;
+        let asset = release::appimage_asset(&manifest)
+            .ok_or_else(|| format!("release {} has no x86-64 AppImage", manifest.version))?
+            .clone();
+        let file = self.download_asset(&asset, emit)?;
+        // The menu entry and icon, staged next to it where the user can read them.
+        let staged = |name: &str, contents: &str| -> Result<String, StepError> {
+            let path = Path::new(&file).with_file_name(name);
+            fs::write(&path, contents).map_err(|e| format!("{}: {e}", path.display()))?;
+            Ok(path.to_string_lossy().into_owned())
+        };
+        let entry = staged(&format!("{}.desktop", asset.name), &install.desktop)?;
+        let icon = staged(&format!("{}.svg", asset.name), &install.icon_svg)?;
+        for (from, to, mode) in [
+            (&file, &install.path, "755"),
+            (&entry, &install.desktop_entry, "644"),
+            (&icon, &install.icon, "644"),
+        ] {
+            let to = self.root.join(to.strip_prefix("/").unwrap_or(to));
+            let to = to.to_string_lossy();
+            self.run(Cmd::new(["install", "-D", "-m", mode, from.as_str(), &to]).as_user(&user), emit)?;
+        }
+        Ok(())
+    }
+
+    /// Download a release's `linux-release.json` and check its signature.
+    fn fetch_release(
+        &mut self,
+        manifest_url: &str,
+        public_key: &str,
+        emit: &mut dyn FnMut(Event),
+    ) -> Result<release::Manifest, StepError> {
         let fetch = Cmd::new(["curl", "-fsSL", "--max-time", "60", manifest_url]);
         emit(Event::Output { line: fetch.display() });
         let manifest = match self.runner.capture(&fetch) {
@@ -536,12 +614,23 @@ impl<R: Runner> Executor<R> {
         emit(Event::Output {
             line: format!("Release {} of {}: signature verified.", manifest.version, manifest.repository),
         });
-        let asset = release::asset_for(&manifest, self.distro)
-            .ok_or_else(|| {
-                format!("release {} has no x86-64 package for {}", manifest.version, self.distro.name())
-            })?
-            .clone();
+        Ok(manifest)
+    }
 
+    /// This distribution's package in a verified release.
+    fn package_asset(&self, manifest: &release::Manifest) -> Result<release::Asset, StepError> {
+        release::asset_for(manifest, self.distro).cloned().ok_or_else(|| {
+            format!("release {} has no x86-64 package for {}", manifest.version, self.distro.name())
+        })
+    }
+
+    /// Download one file of a verified release into the download cache and
+    /// check it against the signed SHA-256. Returns the file's path.
+    fn download_asset(
+        &mut self,
+        asset: &release::Asset,
+        emit: &mut dyn FnMut(Event),
+    ) -> Result<String, StepError> {
         let cache = self.root.join("var/cache/bootcraft/downloads");
         fs::create_dir_all(&cache).map_err(|e| format!("{}: {e}", cache.display()))?;
         let file = cache.join(&asset.name);
@@ -556,12 +645,17 @@ impl<R: Runner> Executor<R> {
             return Err(format!("{} does not match the signed checksum; it was deleted", asset.name));
         }
         emit(Event::Output { line: format!("{}: checksum verified.", asset.name) });
+        Ok(file_str)
+    }
+
+    /// Install a downloaded package file.
+    fn install_file(&mut self, file: String, emit: &mut dyn FnMut(Event)) -> Result<(), StepError> {
         match self.distro {
-            Distro::Arch => self.pacman_upgrade(&[file_str], false, emit),
+            Distro::Arch => self.pacman_upgrade(&[file], false, emit),
             // dnf and apt install a local file with its dependencies, and act on
             // the package's Obsoletes/Replaces themselves.
-            Distro::Fedora => self.dnf(&["install"], &[file_str], emit),
-            Distro::Debian | Distro::Ubuntu | Distro::Mint => self.apt(&["install"], &[file_str], emit),
+            Distro::Fedora => self.dnf(&["install"], &[file], emit),
+            Distro::Debian | Distro::Ubuntu | Distro::Mint => self.apt(&["install"], &[file], emit),
         }
     }
 

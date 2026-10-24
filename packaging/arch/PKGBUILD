@@ -1,0 +1,71 @@
+# Maintainer: Arctic Latent
+# Built from this checkout by packaging/build-linux.sh (not from the AUR).
+pkgname=bootcraft
+pkgver=0.1.0
+pkgrel=1
+pkgdesc='Set up drivers, codecs and apps after installing Linux'
+arch=('x86_64')
+url='https://github.com/ArcticLatent/Bootcraft'
+license=('MIT')
+options=('!buildflags' '!debug')
+# Qt Quick UI (QML, Controls, Dialogs), SVG icons, Wayland, the desktop
+# portal (native file dialogs), pkexec (the helper), curl (app icons, signed
+# releases, AUR metadata).
+depends=(
+  'qt6-base'
+  'qt6-declarative'
+  'qt6-svg'
+  'qt6-wayland'
+  'xdg-desktop-portal'
+  'polkit'
+  'curl'
+)
+makedepends=(
+  'binutils'
+  'cargo'
+  'gcc'
+  'pkgconf'
+)
+source=()
+sha256sums=()
+
+build() {
+  cd "$startdir/../.."
+
+  # Keep build-machine toolchains (a Nix shell, wrappers) out of the binaries.
+  unset "${!NIX_@}"
+  unset CARGO_BUILD_RUSTC_WRAPPER CMAKE_PREFIX_PATH CPATH CPLUS_INCLUDE_PATH C_INCLUDE_PATH \
+    LD_LIBRARY_PATH LIBRARY_PATH PKG_CONFIG_LIBDIR PKG_CONFIG_PATH RUSTC_WRAPPER
+  export PATH='/usr/bin:/bin'
+  export CC='/usr/bin/gcc'
+  export CXX='/usr/bin/g++'
+  # A shared target folder speeds up repeated builds (packaging/build-linux.sh).
+  export CARGO_TARGET_DIR="${BOOTCRAFT_CARGO_TARGET_DIR:-$srcdir/target}"
+  export RUSTFLAGS="-C link-arg=-fuse-ld=bfd"
+  export QMAKE='/usr/bin/qmake6'
+  cargo build --release --locked -p bootcraft -p bootcraft-helper
+}
+
+check() {
+  cd "$startdir/../.."
+  export CARGO_TARGET_DIR="${BOOTCRAFT_CARGO_TARGET_DIR:-$srcdir/target}"
+  bash scripts/verify-linux-elf.sh "$CARGO_TARGET_DIR/release/bootcraft" '/lib64/ld-linux-x86-64.so.2'
+  bash scripts/verify-linux-elf.sh "$CARGO_TARGET_DIR/release/bootcraft-helper" '/lib64/ld-linux-x86-64.so.2'
+}
+
+package() {
+  cd "$startdir/../.."
+  export CARGO_TARGET_DIR="${BOOTCRAFT_CARGO_TARGET_DIR:-$srcdir/target}"
+  local id='io.github.ArcticLatent.Bootcraft'
+
+  install -Dm755 "$CARGO_TARGET_DIR/release/bootcraft" "$pkgdir/usr/bin/bootcraft"
+  # The polkit action names this path; /usr/bin has a link for terminal use.
+  install -Dm755 "$CARGO_TARGET_DIR/release/bootcraft-helper" "$pkgdir/usr/lib/bootcraft/bootcraft-helper"
+  ln -s ../lib/bootcraft/bootcraft-helper "$pkgdir/usr/bin/bootcraft-helper"
+  install -Dm644 "packaging/linux/$id.policy" "$pkgdir/usr/share/polkit-1/actions/$id.policy"
+  install -Dm644 "packaging/linux/$id.desktop" "$pkgdir/usr/share/applications/$id.desktop"
+  install -Dm644 "packaging/linux/$id.metainfo.xml" "$pkgdir/usr/share/metainfo/$id.metainfo.xml"
+  install -Dm644 crates/app/icons/icon.svg "$pkgdir/usr/share/icons/hicolor/scalable/apps/$id.svg"
+  install -Dm644 README.md "$pkgdir/usr/share/doc/$pkgname/README.md"
+  install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+}

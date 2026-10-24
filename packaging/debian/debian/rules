@@ -1,0 +1,25 @@
+#!/usr/bin/make -f
+
+# A shared target folder (packaging/build-linux.sh) speeds up repeated builds.
+export CARGO_TARGET_DIR ?= $(CURDIR)/target/debian
+export QMAKE := qmake6
+APP_ID := io.github.ArcticLatent.Bootcraft
+PKG := debian/bootcraft
+
+%:
+	dh $@
+
+override_dh_auto_build:
+	cargo build --release --locked -p bootcraft -p bootcraft-helper
+
+# The tests run in CI; they need network access for some fixtures' tools.
+override_dh_auto_test:
+
+override_dh_auto_install:
+	install -Dpm0755 $(CARGO_TARGET_DIR)/release/bootcraft $(PKG)/usr/bin/bootcraft
+	install -Dpm0755 $(CARGO_TARGET_DIR)/release/bootcraft-helper $(PKG)/usr/lib/bootcraft/bootcraft-helper
+	ln -s ../lib/bootcraft/bootcraft-helper $(PKG)/usr/bin/bootcraft-helper
+	install -Dpm0644 packaging/linux/$(APP_ID).policy $(PKG)/usr/share/polkit-1/actions/$(APP_ID).policy
+	install -Dpm0644 packaging/linux/$(APP_ID).desktop $(PKG)/usr/share/applications/$(APP_ID).desktop
+	install -Dpm0644 packaging/linux/$(APP_ID).metainfo.xml $(PKG)/usr/share/metainfo/$(APP_ID).metainfo.xml
+	install -Dpm0644 crates/app/icons/icon.svg $(PKG)/usr/share/icons/hicolor/scalable/apps/$(APP_ID).svg

@@ -13,24 +13,33 @@ use std::path::Path;
 use base64::Engine;
 use base64::engine::general_purpose::STANDARD;
 use ed25519_dalek::{Signature, VerifyingKey};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
 use crate::system::Distro;
 
 const DOMAIN: &[u8] = b"arctic-linux-release-manifest\x00v1\x00";
 
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+/// Arctic Latent's release-signing key (Ed25519, base64), shared by
+/// ComfyPilot and Bootcraft. Its private half is the release workflows'
+/// `ARCTIC_UPDATE_SIGNING_KEY` secret.
+pub const ARCTIC_RELEASE_PUBLIC_KEY: &str = "rrs0a3FucFu27aAz2rQ1N2kZhvP/BEgNTHKqZK9nS54=";
+
+/// Bootcraft's own latest release, which it updates itself from.
+pub const BOOTCRAFT_MANIFEST: &str =
+    "https://github.com/ArcticLatent/Bootcraft/releases/latest/download/linux-release.json";
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Manifest {
     pub version: String,
     pub tag: String,
     pub repository: String,
     pub assets: Vec<Asset>,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub signature: Option<String>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Asset {
     pub name: String,
     pub sha256: String,
@@ -38,7 +47,7 @@ pub struct Asset {
 }
 
 /// The exact bytes the release key signs.
-fn payload(manifest: &Manifest) -> Vec<u8> {
+pub fn payload(manifest: &Manifest) -> Vec<u8> {
     let mut buf = DOMAIN.to_vec();
     for field in [&manifest.version, &manifest.tag, &manifest.repository] {
         buf.extend_from_slice(field.as_bytes());
@@ -78,18 +87,41 @@ pub fn verify(json: &str, public_key: &str) -> Result<Manifest, String> {
 
 /// The x86-64 package for this distribution, if the release has one.
 pub fn asset_for(manifest: &Manifest, distro: Distro) -> Option<&Asset> {
+    find_asset(manifest, |name| match distro {
+        Distro::Arch => name.contains(".pkg.tar"),
+        Distro::Fedora => name.ends_with(".rpm") && !name.ends_with(".src.rpm"),
+        Distro::Ubuntu | Distro::Mint | Distro::Debian => name.ends_with(".deb"),
+    })
+}
+
+/// The release's x86-64 AppImage, if it has one.
+pub fn appimage_asset(manifest: &Manifest) -> Option<&Asset> {
+    find_asset(manifest, |name| name.ends_with(".appimage"))
+}
+
+fn find_asset(manifest: &Manifest, kind: impl Fn(&str) -> bool) -> Option<&Asset> {
     manifest.assets.iter().find(|asset| {
         let name = asset.name.to_ascii_lowercase();
         let x86 = name.contains("x86_64") || name.contains("amd64");
-        let kind = match distro {
-            Distro::Arch => name.contains(".pkg.tar"),
-            Distro::Fedora => name.ends_with(".rpm") && !name.ends_with(".src.rpm"),
-            Distro::Ubuntu | Distro::Mint | Distro::Debian => name.ends_with(".deb"),
-        };
         // The name becomes a file name in the download cache.
         let safe = !name.contains('/') && !name.starts_with('.');
-        x86 && kind && safe && asset.download_url.starts_with("https://")
+        x86 && kind(&name) && safe && asset.download_url.starts_with("https://")
     })
+}
+
+/// Whether version `candidate` is later than `current`, comparing the
+/// numbers of `major.minor.patch` (a leading `v` and a `-suffix` are ignored).
+pub fn is_newer(candidate: &str, current: &str) -> bool {
+    fn numbers(version: &str) -> Vec<u64> {
+        let version = version.trim().trim_start_matches('v');
+        let core = version.split(['-', '+']).next().unwrap_or("");
+        core.split('.').map(|part| part.parse().unwrap_or(0)).collect()
+    }
+    let (mut a, mut b) = (numbers(candidate), numbers(current));
+    let len = a.len().max(b.len());
+    a.resize(len, 0);
+    b.resize(len, 0);
+    a > b
 }
 
 pub fn sha256_file(path: &Path) -> io::Result<String> {
@@ -152,6 +184,20 @@ pub(crate) mod tests {
         assert_eq!(pick(Distro::Arch), Some("comfypilot-1.0.0-1-x86_64.pkg.tar.zst"));
         assert_eq!(pick(Distro::Fedora), Some("comfypilot-1.0.0-1.fc43.x86_64.rpm"));
         assert_eq!(pick(Distro::Ubuntu), Some("comfypilot_1.0.0-1_amd64.deb"));
+        assert_eq!(
+            appimage_asset(&manifest).map(|a| a.name.as_str()),
+            Some("ComfyPilot-1.0.0-x86_64.AppImage")
+        );
+    }
+
+    #[test]
+    fn versions_compare_by_number() {
+        assert!(is_newer("0.1.1", "0.1.0"));
+        assert!(is_newer("0.10.0", "0.9.9"));
+        assert!(is_newer("v1.0", "0.9.0"));
+        assert!(!is_newer("0.1.0", "0.1.0"));
+        assert!(!is_newer("0.1.0-rc1", "0.1.0"));
+        assert!(!is_newer("0.0.9", "0.1.0"));
     }
 
     #[test]

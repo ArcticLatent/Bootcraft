@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>io.github.ArcticLatent.Bootcraft</id>
+  <name>Bootcraft</name>
+  <summary>Set up drivers, codecs and apps after installing Linux</summary>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>MIT</project_license>
+  <developer id="com.arcticlatent">
+    <name>Arctic Latent</name>
+  </developer>
+  <launchable type="desktop-id">io.github.ArcticLatent.Bootcraft.desktop</launchable>
+  <description>
+    <p>Post-install setup for Fedora, Arch Linux, Ubuntu, Linux Mint and Debian: the right NVIDIA driver for your card, media codecs, Flatpak with Flathub, fonts and everyday tools, plus curated creative, development and gaming apps from Flathub or your distribution.</p>
+    <p>Bootcraft shows the full plan before it changes anything, skips what is already in place, and can export the plan as a script.</p>
+  </description>
+  <categories>
+    <category>System</category>
+  </categories>
+  <content_rating type="oars-1.1"/>
+  <url type="homepage">https://github.com/ArcticLatent/Bootcraft</url>
+  <url type="bugtracker">https://github.com/ArcticLatent/Bootcraft/issues</url>
+</component>

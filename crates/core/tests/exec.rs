@@ -337,6 +337,121 @@ mod signed {
         );
     }
 
+    /// A fake system for one release: the manifest, the download, `pacman -Qip`.
+    fn release_responder(manifest: String, download: &'static [u8]) -> Respond {
+        Box::new(move |argv| match argv {
+            [curl, flag, ..] if curl == "curl" && flag == "-fsSL" => (true, manifest.clone()),
+            [env, _, pacman, query, _] if env == "env" && pacman == "pacman" && query == "-Qip" => {
+                (true, NO_CONFLICTS.to_owned())
+            }
+            [curl, .., out_flag, path, _url] if curl == "curl" && out_flag == "-o" => {
+                fs::write(path, download).unwrap();
+                (true, String::new())
+            }
+            _ => (true, String::new()),
+        })
+    }
+
+    fn genuine_sha(f: &Fixture) -> String {
+        let genuine = f.root().join("genuine");
+        fs::write(&genuine, b"genuine package").unwrap();
+        sha256_file(&genuine).unwrap()
+    }
+
+    #[test]
+    fn self_update_installs_only_a_newer_release() {
+        let f = arch_box();
+        let sys = f.detect("KDE");
+        let (manifest, key) = signed_manifest("testpkg-2.0.0-1-x86_64.pkg.tar.zst", &genuine_sha(&f));
+        let update = |current: &str| {
+            let log = Rc::new(RefCell::new(Vec::new()));
+            let runner = FakeRunner {
+                log: Rc::clone(&log),
+                respond: release_responder(manifest.clone(), b"genuine package"),
+            };
+            let mut executor = Executor::new(f.root(), &sys, runner, None).unwrap();
+            let result = executor.update_from_release(
+                "https://example.test/linux-release.json",
+                &key,
+                current,
+                &mut |_| {},
+            );
+            let commands: Vec<String> = log.borrow().iter().map(Cmd::display).collect();
+            (result, commands)
+        };
+
+        let (result, commands) = update("1.4.0");
+        assert_eq!(result, Ok("2.0.0".to_owned()));
+        assert!(commands.last().unwrap().starts_with("$ pacman -U --needed --noconfirm "), "{commands:?}");
+
+        let (result, commands) = update("2.0.0");
+        assert!(result.unwrap_err().contains("not newer"));
+        assert!(!commands.iter().any(|c| c.contains("-o ")), "nothing downloaded: {commands:?}");
+    }
+
+    #[test]
+    fn appimage_is_installed_for_the_user_with_a_menu_entry() {
+        let f = arch_box();
+        let sys = f.detect("KDE");
+        let (manifest, key) = signed_manifest("Test-2.0.0-x86_64.AppImage", &genuine_sha(&f));
+        let home = std::path::PathBuf::from("/home/burce");
+        let install = bootcraft_core::task::AppImageInstall {
+            path: home.join("Applications/Test.AppImage"),
+            desktop_entry: home.join(".local/share/applications/test.desktop"),
+            desktop: "[Desktop Entry]\nName=Test\n".into(),
+            icon: home.join(".local/share/icons/hicolor/scalable/apps/test.svg"),
+            icon_svg: "<svg/>".into(),
+        };
+        let plan = Plan {
+            distro: Distro::Arch,
+            tasks: vec![PlannedTask {
+                id: "app.test".into(),
+                title: "Test".into(),
+                steps: vec![Step::SignedAppImage {
+                    package: "test".into(),
+                    manifest_url: "https://example.test/linux-release.json".into(),
+                    public_key: key,
+                    install,
+                }],
+                reboot: false,
+                requires: Vec::new(),
+                required_by: None,
+            }],
+        };
+        let user = User { name: "burce".into(), uid: 1000, home: home.clone() };
+        let log = Rc::new(RefCell::new(Vec::new()));
+        let runner =
+            FakeRunner { log: Rc::clone(&log), respond: release_responder(manifest, b"genuine package") };
+        let mut executor = Executor::new(f.root(), &sys, runner, Some(user)).unwrap();
+        let mut events = Vec::new();
+        executor.execute(&plan, &mut |e| events.push(e));
+        let commands: Vec<String> = log.borrow().iter().map(Cmd::display).collect();
+        let run = Run { summary: Summary { ok: true, reboot: false }, events, commands };
+        assert_eq!(run.outcome("app.test").0, Outcome::Done, "{:#?}", run.events);
+
+        let cache = f.root().join("var/cache/bootcraft/downloads");
+        let root = f.root().display().to_string();
+        assert_eq!(
+            run.commands[2..],
+            [
+                format!(
+                    "$ install -D -m 755 {}/Test-2.0.0-x86_64.AppImage {root}/home/burce/Applications/Test.AppImage  (as burce)",
+                    cache.display()
+                ),
+                format!(
+                    "$ install -D -m 644 {}/Test-2.0.0-x86_64.AppImage.desktop {root}/home/burce/.local/share/applications/test.desktop  (as burce)",
+                    cache.display()
+                ),
+                format!(
+                    "$ install -D -m 644 {}/Test-2.0.0-x86_64.AppImage.svg {root}/home/burce/.local/share/icons/hicolor/scalable/apps/test.svg  (as burce)",
+                    cache.display()
+                ),
+            ]
+        );
+        assert_eq!(fs::read_to_string(cache.join("Test-2.0.0-x86_64.AppImage.svg")).unwrap(), "<svg/>");
+        assert!(!run.commands.iter().any(|c| c.contains("pacman")), "no package manager: {:?}", run.commands);
+    }
+
     #[test]
     fn tampered_download_is_rejected_and_deleted() {
         let f = arch_box();

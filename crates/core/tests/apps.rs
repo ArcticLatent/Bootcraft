@@ -118,13 +118,38 @@ fn gpu_aware_packages() {
 
 #[test]
 fn comfypilot_installs_from_its_signed_release_everywhere() {
-    for os in [ARCH, UBUNTU_2404, DEBIAN_13, FEDORA_44, MINT_22] {
+    for os in [ARCH, UBUNTU_2604, DEBIAN_13, FEDORA_44] {
         let (_f, sys) = system(os, RTX_4070);
         let catalog = catalog(&sys);
         let app = catalog.app("comfypilot").unwrap();
         assert!(matches!(app.native.as_ref().unwrap().via, Via::SignedRelease { .. }));
         let steps = app.steps(Source::Native).unwrap();
         assert!(matches!(&steps[0], Step::SignedPackage { package, .. } if package == "comfypilot"));
+        assert!(app.icon_svg.is_some_and(|svg| svg.contains("<svg")));
+    }
+}
+
+#[test]
+fn comfypilot_is_an_appimage_where_qt_is_too_old_for_its_package() {
+    const PASSWD: &str = "root:x:0:0::/root:/bin/bash\nburce:x:1000:1000::/home/burce:/bin/bash\n";
+    for os in [UBUNTU_2404, MINT_22] {
+        // Whose home it goes in: unknown without a passwd entry, so not offered.
+        let (f, sys) = system(os, RTX_4070);
+        assert!(!catalog(&sys).app("comfypilot").unwrap().available());
+
+        f.file("etc/passwd", PASSWD);
+        let sys = f.detect("KDE");
+        let steps = catalog(&sys).app("comfypilot").unwrap().steps(Source::Native).unwrap();
+        let Step::SignedAppImage { install, .. } = &steps[0] else { panic!("{steps:?}") };
+        assert_eq!(install.path, std::path::Path::new("/home/burce/Applications/ComfyPilot.AppImage"));
+        assert!(install.desktop.contains("Exec=\"/home/burce/Applications/ComfyPilot.AppImage\"\n"));
+        assert!(install.desktop.contains("Icon=io.github.ArcticLatent.ComfyPilot\n"));
+        assert_eq!(
+            install.desktop_entry,
+            std::path::Path::new(
+                "/home/burce/.local/share/applications/io.github.ArcticLatent.ComfyPilot.desktop"
+            )
+        );
     }
 }
 

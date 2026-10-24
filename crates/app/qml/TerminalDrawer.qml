@@ -125,7 +125,7 @@ Rectangle {
         y: drawer.barHeight
         width: parent.width
         height: drawer.terminalHeight
-        color: "#0b0d10"
+        color: Theme.terminal
 
         Rectangle {
             width: parent.width

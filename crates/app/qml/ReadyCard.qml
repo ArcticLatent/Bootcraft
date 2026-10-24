@@ -95,7 +95,7 @@ Rectangle {
         title: "Export setup script"
         fileMode: FileDialog.SaveFile
         defaultSuffix: "sh"
-        currentFile: StandardPaths.writableLocation(StandardPaths.HomeLocation) + "/bootcraft-setup.sh"
+        selectedFile: StandardPaths.writableLocation(StandardPaths.HomeLocation) + "/bootcraft-setup.sh"
         nameFilters: ["Shell scripts (*.sh)"]
         onAccepted: {
             const path = decodeURIComponent(selectedFile.toString().replace(/^file:\/\//, ""));

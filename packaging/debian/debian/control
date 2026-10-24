@@ -1,0 +1,43 @@
+Source: bootcraft
+Section: admin
+Priority: optional
+Maintainer: Arctic Latent <contact@arcticlatent.com>
+Build-Depends:
+ debhelper-compat (= 13),
+ cargo,
+ rustc,
+ g++,
+ pkg-config,
+ qt6-base-dev,
+ qt6-base-dev-tools,
+ qt6-declarative-dev,
+ qt6-declarative-dev-tools
+Standards-Version: 4.6.2
+Rules-Requires-Root: no
+Homepage: https://github.com/ArcticLatent/Bootcraft
+
+Package: bootcraft
+Architecture: amd64
+Depends:
+ ${misc:Depends},
+ ${shlibs:Depends},
+ qml6-module-qtcore,
+ qml6-module-qtqml-workerscript,
+ qml6-module-qtquick,
+ qml6-module-qtquick-controls,
+ qml6-module-qtquick-dialogs,
+ qml6-module-qtquick-layouts,
+ qml6-module-qtquick-templates,
+ qml6-module-qtquick-window,
+ qml6-module-qt-labs-folderlistmodel,
+ qt6-svg-plugins | libqt6svg6,
+ qt6-wayland,
+ qt6-xdgdesktopportal-platformtheme,
+ xdg-desktop-portal,
+ pkexec,
+ curl
+Description: Set up drivers, codecs and apps after installing Linux
+ Post-install setup for Debian, Ubuntu and Linux Mint (and Fedora and Arch):
+ the right NVIDIA driver, media codecs, Flatpak with Flathub, fonts and
+ everyday tools, plus curated creative, development and gaming apps. Shows the
+ full plan before changing anything, and can export it as a script.
