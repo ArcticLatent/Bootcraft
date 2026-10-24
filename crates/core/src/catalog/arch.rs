@@ -1,11 +1,9 @@
-use crate::catalog::FLATHUB_URL;
+use crate::catalog::{ARCH_BUILD_TOOLS as BUILD_TOOLS, FLATHUB, FLATHUB_URL, UPDATE};
 use crate::edit::Edit;
 use crate::system::{Desktop, NvidiaGen, SecureBoot, System};
 use crate::task::{Category, Step, Task};
 
-const UPDATE: &str = "system.update";
 const MULTILIB: &str = "arch.multilib";
-const BUILD_TOOLS: &str = "arch.build-tools";
 
 /// Kernels in the official repositories, whose `-headers` packages Bootcraft can install.
 const OFFICIAL_KERNELS: &[&str] =
@@ -19,7 +17,7 @@ pub fn tasks(sys: &System) -> Vec<Task> {
             tasks.push(nvidia_vaapi());
         }
     }
-    tasks.extend([paru(), flathub(), codecs(), video_player(&sys.desktop), archive(), firefox()]);
+    tasks.extend([paru(), flathub(), codecs(), archive(), drives(), fonts(), ms_fonts(), firmware()]);
     if sys.desktop == Desktop::Cinnamon {
         tasks.push(cinnamon_mint());
     }
@@ -58,7 +56,6 @@ fn update() -> Task {
     Task::new(UPDATE, Category::System, "Update the system")
         .recommended()
         .description("Sync the package databases and upgrade every package.")
-        .reboot()
         .step(Step::run(&["pacman", "-Syu", "--noconfirm"]))
 }
 
@@ -94,7 +91,7 @@ fn nvidia(sys: &System, generation: NvidiaGen) -> Option<Task> {
                 )
                 // Every NVIDIA kernel-module package (official, DKMS, 580xx, custom
                 // builds like -tkg) provides NVIDIA-MODULE; keep whichever is there.
-                .step(Step::Install { packages: modules, unless: Some("NVIDIA-MODULE".into()) })
+                .step(Step::Install { packages: modules, unless: vec!["NVIDIA-MODULE".into()] })
                 .step(Step::install(&["nvidia-utils", "lib32-nvidia-utils"]))
         }
         NvidiaGen::Legacy580 => {
@@ -115,7 +112,7 @@ fn nvidia(sys: &System, generation: NvidiaGen) -> Option<Task> {
                         "lib32-nvidia-utils",
                     ]));
             if !headers.is_empty() {
-                task = task.step(Step::Install { packages: headers, unless: None });
+                task = task.step(Step::Install { packages: headers, unless: Vec::new() });
             }
             task.step(Step::aur(&["nvidia-580xx-utils", "lib32-nvidia-580xx-utils", "nvidia-580xx-dkms"]))
         }
@@ -143,16 +140,16 @@ fn nvidia_vaapi() -> Task {
 }
 
 fn paru() -> Task {
-    Task::new("arch.paru", Category::Tools, "paru AUR helper")
+    Task::new("arch.paru", Category::Tools, "AUR helper (paru)")
         .recommended()
-        .description("Install paru (prebuilt) and list search results bottom-up.")
+        .description("Install paru (prebuilt) unless you already use an AUR helper, and list search results bottom-up.")
         .requires(&[BUILD_TOOLS])
-        .step(Step::aur(&["paru-bin"]))
-        .step(Step::edit("/etc/paru.conf", Edit::flag("options", "BottomUp")))
+        .step(Step::aur_unless(&["paru", "yay", "pikaur"], &["paru-bin"]))
+        .step(Step::edit_existing("/etc/paru.conf", Edit::flag("options", "BottomUp")))
 }
 
 fn flathub() -> Task {
-    package_task("flatpak.flathub", Category::Apps, "Flatpak with Flathub")
+    package_task(FLATHUB, Category::Apps, "Flatpak with Flathub")
         .recommended()
         .step(Step::install(&["flatpak"]))
         .step(Step::FlatpakRemote { name: "flathub".into(), url: FLATHUB_URL.into() })
@@ -173,18 +170,6 @@ fn codecs() -> Task {
         ]))
 }
 
-fn video_player(desktop: &Desktop) -> Task {
-    let task = |title| package_task("media.player", Category::Multimedia, title).recommended();
-    match desktop {
-        Desktop::Kde => task("Video player: MPC-QT + mpv")
-            .requires(&[BUILD_TOOLS])
-            .step(Step::install(&["mpv"]))
-            .step(Step::aur(&["mpc-qt-bin"])),
-        Desktop::Cinnamon => task("Video player: Showtime").step(Step::install(&["showtime"])),
-        _ => task("Video player: Celluloid + mpv").step(Step::install(&["celluloid", "mpv"])),
-    }
-}
-
 fn archive() -> Task {
     package_task("tools.archive", Category::Tools, "Archive tools")
         .recommended()
@@ -192,13 +177,39 @@ fn archive() -> Task {
         .step(Step::install(&["tar", "gzip", "zip", "unzip", "7zip", "unrar"]))
 }
 
-fn firefox() -> Task {
-    package_task("apps.firefox", Category::Apps, "Firefox").recommended().step(Step::install(&["firefox"]))
+fn drives() -> Task {
+    package_task("tools.drives", Category::Tools, "NTFS and exFAT drives")
+        .recommended()
+        .description("Read and write Windows-formatted disks and SD cards.")
+        .step(Step::install(&["ntfs-3g", "exfatprogs"]))
+}
+
+fn fonts() -> Task {
+    package_task("system.fonts", Category::System, "Fonts for every language and emoji")
+        .recommended()
+        .description(
+            "Noto fonts, including Chinese, Japanese, Korean and color emoji, so no text shows as boxes.",
+        )
+        .step(Step::install(&["noto-fonts", "noto-fonts-cjk", "noto-fonts-emoji"]))
+}
+
+fn ms_fonts() -> Task {
+    Task::new("system.ms-fonts", Category::System, "Microsoft core fonts")
+        .description("Arial, Times New Roman and friends, for documents made on Windows.")
+        .note("Built from the AUR; installing them means accepting Microsoft's font license.")
+        .requires(&[UPDATE, BUILD_TOOLS])
+        .step(Step::aur(&["ttf-ms-fonts"]))
+}
+
+fn firmware() -> Task {
+    package_task("system.firmware", Category::System, "Firmware updates")
+        .recommended()
+        .description("fwupd, which updates device firmware from the Linux Vendor Firmware Service.")
+        .step(Step::install(&["fwupd"]))
 }
 
 fn cinnamon_mint() -> Task {
     package_task("desktop.cinnamon-mint", Category::Desktop, "Linux Mint look for Cinnamon")
-        .recommended()
         .description("Mint's themes, icons, sounds and login screen, plus the usual Cinnamon desktop apps.")
         .note("mint-artwork and its theme dependencies are large AUR builds and take a while.")
         .requires(&[BUILD_TOOLS])
@@ -214,7 +225,7 @@ fn cinnamon_mint() -> Task {
         // nemo-fileroller replaces engrampa as the archive handler.
         .step(Step::remove(&["engrampa"]))
         .step(Step::aur(&["mint-artwork"]))
-        .step(Step::edit(
+        .step(Step::edit_existing(
             "/etc/lightdm/lightdm.conf",
             Edit::set_key("Seat:*", "greeter-session", "lightdm-slick-greeter"),
         ))

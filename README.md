@@ -6,9 +6,8 @@ tools and optional debloating, for **Fedora**, **Arch Linux**, **Ubuntu**,
 [post-linux](https://github.com/ArcticLatent/post-linux) script and is being
 rebuilt as a Rust + Qt Quick desktop app.
 
-> **Status:** early development. System detection and dry-run planning work
-> on Arch Linux; nothing is installed yet. Other distributions and the GUI
-> follow.
+> **Status:** early development. On Arch Linux, Bootcraft detects, plans and
+> applies from the terminal; other distributions and the GUI follow.
 
 ## How it works
 
@@ -23,6 +22,35 @@ rebuilt as a Rust + Qt Quick desktop app.
   (for example a custom `nvidia-open-dkms-tkg` build).
 - **Opinionated steps are opt-in.** Debloat tasks live in their own section
   and are never ticked by default.
+- **Fails safely.** A failed task skips only the tasks that need it; config
+  files are written atomically with a `.bootcraft.bak` of the original; every
+  run is logged to `/var/log/bootcraft/`.
+- **AUR without sudo prompts.** AUR dependencies are resolved by Bootcraft,
+  packages are built as your user in `~/.cache/bootcraft/aur` and installed
+  with `pacman -U`.
+
+### Workflows
+
+Essentials is the base: updates, drivers, codecs, Flatpak, archive tools,
+drive support, fonts and firmware updates; no extra apps. Workflows stack on
+top of it, each with apps ticked by default and more to add:
+
+| Workflow | Ticked by default | Also available |
+|:--|:--|:--|
+| **Creative** | Blender, Krita, GIMP, Inkscape, Kdenlive, OBS Studio, FFmpeg | darktable, digiKam, Shotcut, HandBrake, Audacity, Ardour, DaVinci Resolve (Arch), Synfig, Glaxnimate, OpenToonz, FreeCAD, Scribus, Upscayl and small helpers |
+| **Development** | VSCodium, Git, GitHub CLI, modern CLI tools, Podman & Distrobox | VS Code, Zed, Neovim, JetBrains Toolbox, toolchains (C/C++, Rust, Python, Node.js, Go), Docker, Bruno, DBeaver, terminals; AI: [ComfyPilot](https://github.com/ArcticLatent/ComfyPilot), Ollama, Alpaca, CUDA |
+| **Gaming** | Steam, Heroic, ProtonPlus, MangoHud, GameMode | Lutris, Bottles, Faugus, Discord, Prism Launcher, RetroArch, Moonlight |
+
+### Flatpak or system packages
+
+`--prefer auto|flatpak|native` (and a per-app choice) decides where apps come
+from. **Auto** uses system packages where the distribution keeps apps current
+(Arch, Fedora) and Flathub where it freezes them for years (Ubuntu, Mint,
+Debian: Ubuntu 24.04 still ships GIMP 2.10). Some apps override this: editors,
+terminals and Steam need the host system, Bottles is supported upstream only as
+a Flatpak, and a verified Flathub build is preferred over an AUR build.
+ComfyPilot is installed from its GitHub release after checking the release's
+Ed25519 signature and the package's SHA-256.
 
 ### NVIDIA driver branches
 
@@ -37,6 +65,7 @@ rebuilt as a Rust + Qt Quick desktop app.
 ```
 crates/core     detection, task catalog, planner, probe (no root, no Qt)
 crates/helper   bootcraft-helper: the privileged side, also a headless CLI
+data/polkit     polkit action for `pkexec /usr/lib/bootcraft/bootcraft-helper serve`
 ```
 
 The GUI (`crates/app`, CXX-Qt + Qt Quick Controls) will run unprivileged and
@@ -51,7 +80,15 @@ cargo run -p bootcraft-helper -- tasks            # available tasks, ticked = re
 cargo run -p bootcraft-helper -- plan             # dry run of the recommended set
 cargo run -p bootcraft-helper -- plan --select gpu.nvidia,debloat.kde
 cargo run -p bootcraft-helper -- plan --nvidia legacy --desktop gnome --json
+cargo run -p bootcraft-helper -- apps --packs development      # where each app would come from
+cargo run -p bootcraft-helper -- plan --packs creative,gaming --apps comfypilot,gimp:flatpak
+
+cargo build && sudo target/debug/bootcraft-helper apply --select media.codecs
 ```
+
+`apply` prints the plan and asks before changing anything. On Arch, every
+install task pulls in "Update the system" (`pacman -Syu`), because installing
+from out-of-date databases is unsupported there.
 
 ## Development
 

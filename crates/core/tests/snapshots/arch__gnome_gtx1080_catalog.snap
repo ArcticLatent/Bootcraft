@@ -1,6 +1,6 @@
 ---
 source: crates/core/tests/arch.rs
-expression: summarize(&catalog(&sys))
+expression: summarize(&tasks(&sys))
 ---
 [x] System     arch.pacman-tweaks — Colorful pacman output
 [x] System     arch.multilib — Enable the multilib repository
@@ -10,12 +10,15 @@ expression: summarize(&catalog(&sys))
       note: The 580 branch gets security fixes only.
       note: Secure Boot is on. Arch does not sign kernel modules, so the driver will not load until you sign it (for example with sbctl) or turn Secure Boot off.
 [x] Multimedia gpu.nvidia-vaapi — Hardware video decoding on NVIDIA
-[x] Tools      arch.paru — paru AUR helper
+[x] Tools      arch.paru — AUR helper (paru)
 [x] Apps       flatpak.flathub — Flatpak with Flathub
 [x] Multimedia media.codecs — Media codecs and thumbnails
-[x] Multimedia media.player — Video player: Celluloid + mpv
 [x] Tools      tools.archive — Archive tools
-[x] Apps       apps.firefox — Firefox
+[x] Tools      tools.drives — NTFS and exFAT drives
+[x] System     system.fonts — Fonts for every language and emoji
+[ ] System     system.ms-fonts — Microsoft core fonts
+      note: Built from the AUR; installing them means accepting Microsoft's font license.
+[x] System     system.firmware — Firmware updates
 [ ] System     system.firewall — Firewall (ufw)
 [ ] Debloat    debloat.gnome — Remove GNOME extras
 [ ] Debloat    debloat.libreoffice — Remove LibreOffice

@@ -112,23 +112,39 @@ pub enum Step {
     /// Install packages from the distribution's repositories.
     Install {
         packages: Vec<String>,
-        /// Skip the step when this package or virtual provide is already
+        /// Skip the step when any of these packages or virtual provides is
         /// installed, e.g. a custom driver build providing `NVIDIA-MODULE`.
-        #[serde(skip_serializing_if = "Option::is_none")]
-        unless: Option<String>,
+        #[serde(skip_serializing_if = "Vec::is_empty")]
+        unless: Vec<String>,
     },
     /// Remove packages that are installed and skip the rest. A trailing `*`
     /// matches by prefix, e.g. `libreoffice*`.
     Remove { packages: Vec<String> },
     /// Arch: build packages from the AUR as the invoking user, then install
     /// them with pacman. AUR dependencies are resolved and built first.
-    AurInstall { packages: Vec<String> },
+    AurInstall {
+        packages: Vec<String>,
+        /// Same as for [`Step::Install`].
+        #[serde(skip_serializing_if = "Vec::is_empty")]
+        unless: Vec<String>,
+    },
+    /// Download a package from a release with a signed `linux-release.json`
+    /// (see [`crate::release`]), check the signature and the file's SHA-256,
+    /// then install it with the package manager.
+    SignedPackage { package: String, manifest_url: String, public_key: String },
     /// Add a Flatpak remote system-wide.
     FlatpakRemote { name: String, url: String },
     /// Install Flatpak apps system-wide.
     FlatpakInstall { remote: String, apps: Vec<String> },
     /// Apply a structured edit to a config file.
-    Edit { path: PathBuf, edit: Edit },
+    Edit {
+        path: PathBuf,
+        edit: Edit,
+        /// The file belongs to an optional program (paru, LightDM): leave it
+        /// alone when it doesn't exist instead of creating it.
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        if_exists: bool,
+    },
     /// Enable and start a systemd unit.
     EnableService { unit: String },
     /// Run a program. Arguments are passed as-is; there is no shell.
@@ -137,7 +153,7 @@ pub enum Step {
 
 impl Step {
     pub fn install(packages: &[&str]) -> Self {
-        Self::Install { packages: strings(packages), unless: None }
+        Self::Install { packages: strings(packages), unless: Vec::new() }
     }
 
     pub fn remove(packages: &[&str]) -> Self {
@@ -145,11 +161,22 @@ impl Step {
     }
 
     pub fn aur(packages: &[&str]) -> Self {
-        Self::AurInstall { packages: strings(packages) }
+        Self::AurInstall { packages: strings(packages), unless: Vec::new() }
+    }
+
+    /// An AUR install that is skipped when any of `alternatives` is
+    /// installed, e.g. `paru-bin` unless you already use paru or yay.
+    pub fn aur_unless(alternatives: &[&str], packages: &[&str]) -> Self {
+        Self::AurInstall { packages: strings(packages), unless: strings(alternatives) }
     }
 
     pub fn edit(path: &str, edit: Edit) -> Self {
-        Self::Edit { path: path.into(), edit }
+        Self::Edit { path: path.into(), edit, if_exists: false }
+    }
+
+    /// An edit to the config file of an optional program; see `if_exists`.
+    pub fn edit_existing(path: &str, edit: Edit) -> Self {
+        Self::Edit { path: path.into(), edit, if_exists: true }
     }
 
     pub fn run(argv: &[&str]) -> Self {
@@ -166,11 +193,7 @@ impl Step {
                     Distro::Fedora => "dnf install -y",
                     Distro::Ubuntu | Distro::Mint | Distro::Debian => "apt-get install -y",
                 };
-                let mut line = format!("{pm} {}", packages.join(" "));
-                if let Some(provide) = unless {
-                    line.push_str(&format!("  (skipped if {provide} is already installed)"));
-                }
-                line
+                format!("{pm} {}{}", packages.join(" "), unless_note(unless))
             }
             Self::Remove { packages } => {
                 let pm = match distro {
@@ -180,8 +203,13 @@ impl Step {
                 };
                 format!("{pm} {} (installed ones only)", packages.join(" "))
             }
-            Self::AurInstall { packages } => {
-                format!("build from the AUR as your user, then pacman -U: {}", packages.join(" "))
+            Self::AurInstall { packages, unless } => format!(
+                "build from the AUR as your user, then pacman -U: {}{}",
+                packages.join(" "),
+                unless_note(unless)
+            ),
+            Self::SignedPackage { package, manifest_url, .. } => {
+                format!("download {package} from its signed release ({manifest_url}), verify it, install it")
             }
             Self::FlatpakRemote { name, url } => {
                 format!("flatpak remote-add --if-not-exists --system {name} {url}")
@@ -189,7 +217,10 @@ impl Step {
             Self::FlatpakInstall { remote, apps } => {
                 format!("flatpak install -y --noninteractive --system {remote} {}", apps.join(" "))
             }
-            Self::Edit { path, edit } => format!("edit {}: {edit}", path.display()),
+            Self::Edit { path, edit, if_exists } => {
+                let only = if *if_exists { " (if the file exists)" } else { "" };
+                format!("edit {}: {edit}{only}", path.display())
+            }
             Self::EnableService { unit } => format!("systemctl enable --now {unit}"),
             Self::Run { argv } => argv.iter().map(|a| shell_quote(a)).collect::<Vec<_>>().join(" "),
         }
@@ -199,6 +230,14 @@ impl Step {
 impl fmt::Display for Category {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(self.title())
+    }
+}
+
+fn unless_note(unless: &[String]) -> String {
+    match unless {
+        [] => String::new(),
+        [one] => format!("  (skipped if {one} is already installed)"),
+        [rest @ .., last] => format!("  (skipped if {} or {last} is already installed)", rest.join(", ")),
     }
 }
 

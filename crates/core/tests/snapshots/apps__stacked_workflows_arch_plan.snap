@@ -1,0 +1,107 @@
+---
+source: crates/core/tests/apps.rs
+expression: plan.render()
+---
+Bootcraft plan for Arch Linux (32 tasks)
+
+[1/32] Colorful pacman output  (arch.pacman-tweaks)
+    $ edit /etc/pacman.conf: enable Color in [options]
+    $ edit /etc/pacman.conf: enable ILoveCandy in [options]
+
+[2/32] Enable the multilib repository  (arch.multilib)
+    $ edit /etc/pacman.conf: enable the [multilib] repository
+
+[3/32] Update the system  (system.update)
+    $ pacman -Syu --noconfirm
+
+[4/32] Build tools (base-devel, git)  (arch.build-tools)
+    $ pacman -S --needed --noconfirm base-devel git
+
+[5/32] NVIDIA driver (open kernel modules)  (gpu.nvidia)
+    $ pacman -S --needed --noconfirm nvidia-open  (skipped if NVIDIA-MODULE is already installed)
+    $ pacman -S --needed --noconfirm nvidia-utils lib32-nvidia-utils
+
+[6/32] Hardware video decoding on NVIDIA  (gpu.nvidia-vaapi)
+    $ pacman -S --needed --noconfirm libva-nvidia-driver
+
+[7/32] AUR helper (paru)  (arch.paru)
+    $ build from the AUR as your user, then pacman -U: paru-bin  (skipped if paru, yay or pikaur is already installed)
+    $ edit /etc/paru.conf: enable BottomUp in [options] (if the file exists)
+
+[8/32] Flatpak with Flathub  (flatpak.flathub)
+    $ pacman -S --needed --noconfirm flatpak
+    $ flatpak remote-add --if-not-exists --system flathub https://dl.flathub.org/repo/flathub.flatpakrepo
+
+[9/32] Media codecs and thumbnails  (media.codecs)
+    $ pacman -S --needed --noconfirm gst-libav gst-plugins-base gst-plugins-good gst-plugins-bad gst-plugins-ugly gst-plugin-va ffmpegthumbnailer
+
+[10/32] Archive tools  (tools.archive)
+    $ pacman -S --needed --noconfirm tar gzip zip unzip 7zip unrar
+
+[11/32] NTFS and exFAT drives  (tools.drives)
+    $ pacman -S --needed --noconfirm ntfs-3g exfatprogs
+
+[12/32] Fonts for every language and emoji  (system.fonts)
+    $ pacman -S --needed --noconfirm noto-fonts noto-fonts-cjk noto-fonts-emoji
+
+[13/32] Firmware updates  (system.firmware)
+    $ pacman -S --needed --noconfirm fwupd
+
+[14/32] Blender (system package)  (app.blender)
+    $ pacman -S --needed --noconfirm blender
+
+[15/32] Krita (system package)  (app.krita)
+    $ pacman -S --needed --noconfirm krita
+
+[16/32] GIMP (system package)  (app.gimp)
+    $ pacman -S --needed --noconfirm gimp
+
+[17/32] Inkscape (system package)  (app.inkscape)
+    $ pacman -S --needed --noconfirm inkscape
+
+[18/32] Kdenlive (system package)  (app.kdenlive)
+    $ pacman -S --needed --noconfirm kdenlive
+
+[19/32] OBS Studio (system package)  (app.obs-studio)
+    $ pacman -S --needed --noconfirm obs-studio
+
+[20/32] FFmpeg (system package)  (app.ffmpeg)
+    $ pacman -S --needed --noconfirm ffmpeg
+
+[21/32] VSCodium (AUR)  (app.vscodium)
+    $ build from the AUR as your user, then pacman -U: vscodium-bin
+
+[22/32] Git (system package)  (app.git)
+    $ pacman -S --needed --noconfirm git git-lfs
+
+[23/32] GitHub CLI (system package)  (app.github-cli)
+    $ pacman -S --needed --noconfirm github-cli
+
+[24/32] Modern CLI tools (system package)  (app.cli-tools)
+    $ pacman -S --needed --noconfirm ripgrep fd bat fzf eza zoxide jq btop tmux lazygit
+
+[25/32] Podman & Distrobox (system package)  (app.podman)
+    $ pacman -S --needed --noconfirm podman distrobox
+
+[26/32] ComfyPilot (signed release)  (app.comfypilot)
+    $ download comfypilot from its signed release (https://github.com/ArcticLatent/ComfyPilot/releases/latest/download/linux-release.json), verify it, install it
+
+[27/32] Steam (system package)  (app.steam)
+    $ pacman -S --needed --noconfirm steam
+
+[28/32] Heroic (Flatpak)  (app.heroic)
+    $ flatpak install -y --noninteractive --system flathub com.heroicgameslauncher.hgl
+
+[29/32] ProtonPlus (Flatpak)  (app.protonplus)
+    $ flatpak install -y --noninteractive --system flathub com.vysp3r.ProtonPlus
+
+[30/32] MangoHud (system package)  (app.mangohud)
+    $ pacman -S --needed --noconfirm mangohud lib32-mangohud
+
+[31/32] GameMode (system package)  (app.gamemode)
+    $ pacman -S --needed --noconfirm gamemode lib32-gamemode
+
+[32/32] Remove KDE extras  (debloat.kde)
+    $ pacman -Rns --noconfirm kmahjongg kmines kpat kolourpaint skanpage akregator kmail krdc krdp neochat krfb ktnef dragon elisa kamoso qrca (installed ones only)
+
+A reboot is required afterwards.

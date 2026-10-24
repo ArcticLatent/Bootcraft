@@ -1,3 +1,5 @@
+#![allow(dead_code)] // Each test binary uses a different subset.
+
 //! A fake root filesystem for detection, probe and plan tests.
 
 use std::fs;

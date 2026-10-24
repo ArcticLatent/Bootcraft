@@ -6,13 +6,16 @@ expression: summarize(&tasks)
 [x] System     arch.multilib — Enable the multilib repository
 [x] System     system.update — Update the system
 [x] Tools      arch.build-tools — Build tools (base-devel, git)
-[x] Tools      arch.paru — paru AUR helper
+[x] Tools      arch.paru — AUR helper (paru)
 [x] Apps       flatpak.flathub — Flatpak with Flathub
 [x] Multimedia media.codecs — Media codecs and thumbnails
-[x] Multimedia media.player — Video player: Showtime
 [x] Tools      tools.archive — Archive tools
-[x] Apps       apps.firefox — Firefox
-[x] Desktop    desktop.cinnamon-mint — Linux Mint look for Cinnamon
+[x] Tools      tools.drives — NTFS and exFAT drives
+[x] System     system.fonts — Fonts for every language and emoji
+[ ] System     system.ms-fonts — Microsoft core fonts
+      note: Built from the AUR; installing them means accepting Microsoft's font license.
+[x] System     system.firmware — Firmware updates
+[ ] Desktop    desktop.cinnamon-mint — Linux Mint look for Cinnamon
       note: mint-artwork and its theme dependencies are large AUR builds and take a while.
 [ ] System     system.firewall — Firewall (ufw)
 [ ] Debloat    debloat.libreoffice — Remove LibreOffice

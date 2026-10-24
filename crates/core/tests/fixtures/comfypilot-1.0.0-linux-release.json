@@ -1,0 +1,28 @@
+{
+  "version": "1.0.0",
+  "tag": "v1.0.0",
+  "repository": "ArcticLatent/ComfyPilot",
+  "assets": [
+    {
+      "name": "ComfyPilot-1.0.0-x86_64.AppImage",
+      "sha256": "e21837e5dec9769da1f24fd37b3c506c26b6d2102f36c4449fb2bbffbfbdea90",
+      "download_url": "https://github.com/ArcticLatent/ComfyPilot/releases/download/v1.0.0/ComfyPilot-1.0.0-x86_64.AppImage"
+    },
+    {
+      "name": "comfypilot-1.0.0-1-x86_64.pkg.tar.zst",
+      "sha256": "39977443c5150f011d9d45f611932cfbffc0ee2ffc8748ddac46700622c3efc8",
+      "download_url": "https://github.com/ArcticLatent/ComfyPilot/releases/download/v1.0.0/comfypilot-1.0.0-1-x86_64.pkg.tar.zst"
+    },
+    {
+      "name": "comfypilot-1.0.0-1.fc43.x86_64.rpm",
+      "sha256": "9380eb471215014b942d53fc8341731e6413279c16180ce31af2bc43801ed211",
+      "download_url": "https://github.com/ArcticLatent/ComfyPilot/releases/download/v1.0.0/comfypilot-1.0.0-1.fc43.x86_64.rpm"
+    },
+    {
+      "name": "comfypilot_1.0.0-1_amd64.deb",
+      "sha256": "8673099cea1eeabfb00dceaf7b68c58aa6045319c1e747fe4211c297e9af6223",
+      "download_url": "https://github.com/ArcticLatent/ComfyPilot/releases/download/v1.0.0/comfypilot_1.0.0-1_amd64.deb"
+    }
+  ],
+  "signature": "42fEWH+giS736BMSzKQXrzG1QpmezlN79Rc6xFvpaXmikbNNexFY2ssRAWAbMBwB7oWeqH/3EJ8Ta84m9JVWDQ=="
+}
