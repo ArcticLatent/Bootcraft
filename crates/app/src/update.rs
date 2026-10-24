@@ -1,6 +1,6 @@
 //! Bootcraft updating itself, as ComfyPilot does. Each release publishes a
 //! signed `linux-release.json` (the release workflow) naming its files with
-//! their SHA-256; Bootcraft checks the signature against Arctic Latent's key
+//! their SHA-256; Bootcraft checks the signature against its release key
 //! before trusting any of it.
 //!
 //! - An AppImage downloads its successor and puts it in place of the running
@@ -14,7 +14,7 @@
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
-use bootcraft_core::release::{self, ARCTIC_RELEASE_PUBLIC_KEY, BOOTCRAFT_MANIFEST, Manifest};
+use bootcraft_core::release::{self, BOOTCRAFT_MANIFEST, BOOTCRAFT_RELEASE_PUBLIC_KEY, Manifest};
 use serde_json::{Value, json};
 
 use crate::bridge::push_event;
@@ -94,7 +94,7 @@ fn fetch_manifest() -> Result<Manifest, String> {
         Some(22) => return Err("No Bootcraft release was found on GitHub.".into()),
         _ => return Err("Couldn't reach GitHub to check for updates.".into()),
     }
-    release::verify(&String::from_utf8_lossy(&out.stdout), ARCTIC_RELEASE_PUBLIC_KEY)
+    release::verify(&String::from_utf8_lossy(&out.stdout), BOOTCRAFT_RELEASE_PUBLIC_KEY)
 }
 
 fn progress(line: &str) {

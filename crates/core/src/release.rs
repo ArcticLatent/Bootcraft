@@ -20,10 +20,10 @@ use crate::system::Distro;
 
 const DOMAIN: &[u8] = b"arctic-linux-release-manifest\x00v1\x00";
 
-/// Arctic Latent's release-signing key (Ed25519, base64), shared by
-/// ComfyPilot and Bootcraft. Its private half is the release workflows'
-/// `ARCTIC_UPDATE_SIGNING_KEY` secret.
-pub const ARCTIC_RELEASE_PUBLIC_KEY: &str = "rrs0a3FucFu27aAz2rQ1N2kZhvP/BEgNTHKqZK9nS54=";
+/// Bootcraft's release-signing key (Ed25519, base64). Its private half is the
+/// `ARCTIC_UPDATE_SIGNING_KEY` secret of Bootcraft's release workflow.
+/// (ComfyPilot signs with its own key: `catalog::COMFYPILOT_PUBLIC_KEY`.)
+pub const BOOTCRAFT_RELEASE_PUBLIC_KEY: &str = "sOpAOe+QCfoUQMNl/ZGpAKGaG4Pu2yaqteYbxqkwr5U=";
 
 /// Bootcraft's own latest release, which it updates itself from.
 pub const BOOTCRAFT_MANIFEST: &str =
@@ -188,6 +188,13 @@ pub(crate) mod tests {
             appimage_asset(&manifest).map(|a| a.name.as_str()),
             Some("ComfyPilot-1.0.0-x86_64.AppImage")
         );
+    }
+
+    #[test]
+    fn bootcraft_release_key_is_a_real_key() {
+        let key = STANDARD.decode(BOOTCRAFT_RELEASE_PUBLIC_KEY).expect("base64");
+        let key: [u8; 32] = key.try_into().expect("32 bytes");
+        assert!(VerifyingKey::from_bytes(&key).is_ok());
     }
 
     #[test]

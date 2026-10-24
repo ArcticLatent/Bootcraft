@@ -9,7 +9,7 @@
 #   SHA256SUMS           every file's checksum
 #
 # The manifest is signed with ARCTIC_UPDATE_SIGNING_KEY (tools/
-# manifest-signer) and checked against Arctic Latent's public key built into
+# manifest-signer) and checked against the public key built into
 # Bootcraft, so a wrong key stops the release. It has the format ComfyPilot
 # publishes (and Bootcraft checks when it installs ComfyPilot).
 set -euo pipefail

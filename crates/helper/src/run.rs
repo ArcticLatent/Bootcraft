@@ -161,7 +161,7 @@ pub fn self_update(root: &Path) -> ExitCode {
     let mut log = Log::create(root);
     let result = executor.update_from_release(
         release::BOOTCRAFT_MANIFEST,
-        release::ARCTIC_RELEASE_PUBLIC_KEY,
+        release::BOOTCRAFT_RELEASE_PUBLIC_KEY,
         env!("CARGO_PKG_VERSION"),
         &mut |event| {
             log.write(&event);

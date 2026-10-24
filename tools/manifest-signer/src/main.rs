@@ -2,8 +2,7 @@
 //!
 //! Never shipped: only `packaging/release-manifests.sh` runs it, in the
 //! release workflow. It is the one place the private key is read; Bootcraft
-//! itself only verifies, with the public key in `bootcraft_core::release`
-//! (Arctic Latent's key, shared with ComfyPilot).
+//! itself only verifies, with the public key in `bootcraft_core::release`.
 //!
 //!   manifest-signer keygen
 //!       A new Ed25519 key pair, both halves in base64.
@@ -16,7 +15,7 @@ use std::process::ExitCode;
 
 use base64::Engine;
 use base64::engine::general_purpose::STANDARD;
-use bootcraft_core::release::{self, ARCTIC_RELEASE_PUBLIC_KEY, Manifest};
+use bootcraft_core::release::{self, BOOTCRAFT_RELEASE_PUBLIC_KEY, Manifest};
 use ed25519_dalek::{Signer, SigningKey};
 
 const SIGNING_KEY_ENV: &str = "ARCTIC_UPDATE_SIGNING_KEY";
@@ -27,7 +26,7 @@ fn main() -> ExitCode {
         Some("keygen") => keygen(),
         Some("sign") => option(&args, "--manifest").and_then(|path| sign(&path)),
         Some("verify") => option(&args, "--manifest").and_then(|path| {
-            let key = option(&args, "--pubkey").unwrap_or_else(|_| ARCTIC_RELEASE_PUBLIC_KEY.to_owned());
+            let key = option(&args, "--pubkey").unwrap_or_else(|_| BOOTCRAFT_RELEASE_PUBLIC_KEY.to_owned());
             verify(&path, &key)
         }),
         _ => Err("usage: manifest-signer keygen | sign --manifest <path> | verify --manifest <path> [--pubkey <base64>]".into()),
@@ -55,7 +54,7 @@ fn keygen() -> Result<(), String> {
     let key = SigningKey::from_bytes(&secret);
     println!("private (keep secret, {SIGNING_KEY_ENV}): {}", STANDARD.encode(key.to_bytes()));
     println!(
-        "public (bootcraft_core::release::ARCTIC_RELEASE_PUBLIC_KEY): {}",
+        "public (bootcraft_core::release::BOOTCRAFT_RELEASE_PUBLIC_KEY): {}",
         STANDARD.encode(key.verifying_key().to_bytes())
     );
     Ok(())

@@ -84,7 +84,7 @@ Then open **Bootcraft** from your applications menu. It runs as you and asks
 for your password (through polkit) only when you start the setup.
 
 Every release has a `SHA256SUMS` file, and a `linux-release.json` listing each
-file's SHA-256, signed with Arctic Latent's release key.
+file's SHA-256, signed with Bootcraft's release key.
 
 ### Updates
 

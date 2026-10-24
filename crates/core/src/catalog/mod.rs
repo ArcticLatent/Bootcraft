@@ -19,8 +19,8 @@ pub const FLATHUB_URL: &str = "https://dl.flathub.org/repo/flathub.flatpakrepo";
 pub const COMFYPILOT_MANIFEST: &str =
     "https://github.com/ArcticLatent/ComfyPilot/releases/latest/download/linux-release.json";
 /// ComfyPilot's release-signing key, as pinned in its own updater
-/// (`src/update_signing.rs`): Arctic Latent's release key.
-pub const COMFYPILOT_PUBLIC_KEY: &str = crate::release::ARCTIC_RELEASE_PUBLIC_KEY;
+/// (`src/update_signing.rs`).
+pub const COMFYPILOT_PUBLIC_KEY: &str = "rrs0a3FucFu27aAz2rQ1N2kZhvP/BEgNTHKqZK9nS54=";
 
 /// Task IDs that apps depend on.
 pub const UPDATE: &str = "system.update";
