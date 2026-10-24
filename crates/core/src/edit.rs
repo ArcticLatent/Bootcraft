@@ -19,9 +19,17 @@ pub enum Edit {
     /// INI-style `key=value` inside `[section]`: replace an active or commented
     /// assignment, or add one. The section is created if missing.
     SetKey { section: String, key: String, value: String },
+    /// apt sources: add repository components (`contrib`, `non-free`,
+    /// `multiverse`...) to every active source, in either the deb822
+    /// `.sources` format (`Components:` lines) or one-line `deb` lines.
+    AptComponents { components: Vec<String> },
 }
 
 impl Edit {
+    pub fn apt_components(components: &[&str]) -> Self {
+        Self::AptComponents { components: components.iter().map(|c| (*c).to_owned()).collect() }
+    }
+
     pub fn flag(section: &str, flag: &str) -> Self {
         Self::EnableFlag { section: section.into(), flag: flag.into() }
     }
@@ -40,6 +48,7 @@ impl Edit {
             Self::EnableFlag { section, flag } => enable_flag(&mut lines, section, flag),
             Self::EnablePacmanRepo { repo } => enable_pacman_repo(&mut lines, repo),
             Self::SetKey { section, key, value } => set_key(&mut lines, section, key, value),
+            Self::AptComponents { components } => apt_components(&mut lines, components),
         }
         let mut out = lines.join("\n");
         out.push('\n');
@@ -59,6 +68,9 @@ impl fmt::Display for Edit {
             Self::EnableFlag { section, flag } => write!(f, "enable {flag} in [{section}]"),
             Self::EnablePacmanRepo { repo } => write!(f, "enable the [{repo}] repository"),
             Self::SetKey { section, key, value } => write!(f, "set {key}={value} in [{section}]"),
+            Self::AptComponents { components } => {
+                write!(f, "add the {} components to every source", components.join(", "))
+            }
         }
     }
 }
@@ -145,6 +157,45 @@ fn set_key(lines: &mut Vec<String>, section: &str, key: &str, value: &str) {
     }
 }
 
+fn apt_components(lines: &mut [String], wanted: &[String]) {
+    let add_missing = |present: &mut Vec<String>| {
+        for component in wanted {
+            if !present.contains(component) {
+                present.push(component.clone());
+            }
+        }
+    };
+    for line in lines.iter_mut() {
+        let trimmed = line.trim_start();
+        if let Some(value) = trimmed.strip_prefix("Components:") {
+            // deb822: one `Components:` line per stanza.
+            let mut present: Vec<String> = value.split_whitespace().map(str::to_owned).collect();
+            add_missing(&mut present);
+            *line = format!("Components: {}", present.join(" "));
+        } else if trimmed.starts_with("deb ") || trimmed.starts_with("deb-src ") {
+            // One-line: `deb [options] uri suite component...`.
+            let mut tokens: Vec<String> = trimmed.split_whitespace().map(str::to_owned).collect();
+            let mut i = 1;
+            if tokens.get(i).is_some_and(|t| t.starts_with('[')) {
+                while i < tokens.len() && !tokens[i].ends_with(']') {
+                    i += 1;
+                }
+                i += 1;
+            }
+            // uri, suite, then the components; flat repositories (suite ending
+            // in `/`) and CD-ROMs have none to add.
+            let flat = tokens.get(i + 1).is_some_and(|suite| suite.ends_with('/'));
+            if tokens.len() <= i + 1 || flat || tokens[i].starts_with("cdrom:") {
+                continue;
+            }
+            let mut present = tokens.split_off(i + 2);
+            add_missing(&mut present);
+            tokens.extend(present);
+            *line = tokens.join(" ");
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -226,5 +277,26 @@ Include = /etc/pacman.d/mirrorlist
     fn set_key_creates_section() {
         let out = Edit::set_key("Seat:*", "greeter-session", "x").apply("[LightDM]\n");
         assert_eq!(out, "[LightDM]\n\n[Seat:*]\ngreeter-session=x\n");
+    }
+
+    #[test]
+    fn apt_components_in_deb822_sources() {
+        let sources = "Types: deb\nURIs: http://deb.debian.org/debian\nSuites: trixie trixie-updates\nComponents: main\nSigned-By: /usr/share/keyrings/debian-archive-keyring.pgp\n\nTypes: deb\nURIs: http://deb.debian.org/debian-security\nSuites: trixie-security\nComponents: main non-free-firmware\n";
+        let edit = Edit::apt_components(&["contrib", "non-free", "non-free-firmware"]);
+        let out = edit.apply(sources);
+        assert_eq!(out.matches("Components: main contrib non-free non-free-firmware\n").count(), 1);
+        assert!(out.contains("Components: main non-free-firmware contrib non-free\n"));
+        assert!(edit.is_applied(&out));
+        assert!(!edit.is_applied(sources));
+    }
+
+    #[test]
+    fn apt_components_in_one_line_sources() {
+        let list = "# deb cdrom:[Debian]/ trixie main\ndeb http://deb.debian.org/debian/ trixie main\ndeb [arch=amd64 signed-by=/k.gpg] https://x.example/apt stable main\ndeb https://flat.example/repo ./\n";
+        let out = Edit::apt_components(&["contrib"]).apply(list);
+        assert_eq!(
+            out,
+            "# deb cdrom:[Debian]/ trixie main\ndeb http://deb.debian.org/debian/ trixie main contrib\ndeb [arch=amd64 signed-by=/k.gpg] https://x.example/apt stable main contrib\ndeb https://flat.example/repo ./\n"
+        );
     }
 }

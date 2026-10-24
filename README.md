@@ -6,8 +6,10 @@ tools and optional debloating, for **Fedora**, **Arch Linux**, **Ubuntu**,
 [post-linux](https://github.com/ArcticLatent/post-linux) script and is being
 rebuilt as a Rust + Qt Quick desktop app.
 
-> **Status:** early development. On Arch Linux, Bootcraft detects, plans and
-> applies, from the desktop app or the terminal; other distributions follow.
+> **Status:** early development. Bootcraft detects, plans and applies on all
+> five distributions, from the desktop app or the terminal. Package names and
+> the non-driver tasks are tested in containers; the NVIDIA driver tasks have
+> been run on real hardware only on Arch so far.
 
 ## How it works
 
@@ -28,6 +30,18 @@ rebuilt as a Rust + Qt Quick desktop app.
 - **AUR without sudo prompts.** AUR dependencies are resolved by Bootcraft,
   packages are built as your user in `~/.cache/bootcraft/aur` and installed
   with `pacman -U`.
+- **Exports a script.** Any plan can be saved as a standalone bash script that
+  does the same steps, for review or for machines without Bootcraft.
+
+### Per distribution
+
+| | Repositories it enables | NVIDIA driver | Extras |
+|:--|:--|:--|:--|
+| **Arch** | multilib | `nvidia-open` (or DKMS); AUR `nvidia-580xx` for legacy cards | yay, pacman colors, Mint look on Cinnamon |
+| **Fedora** | RPM Fusion | `akmod-nvidia`; `akmod-nvidia-580xx` for legacy cards | full FFmpeg and AMD/Intel video decoding from RPM Fusion, parallel dnf downloads |
+| **Debian 13** | contrib, non-free | NVIDIA's repository (pinned keyring); Debian's 550 for legacy cards | sudo for your account, optional backports kernel |
+| **Ubuntu** | universe, multiverse | newest open driver from `ubuntu-drivers`; up to 580 for legacy cards | optional Snap → Flatpak with Firefox from Mozilla's repository |
+| **Mint** | (already complete) | as Ubuntu | optional lower swappiness |
 
 ### Workflows
 
@@ -85,6 +99,7 @@ cargo run -p bootcraft-helper -- plan --select gpu.nvidia,debloat.kde
 cargo run -p bootcraft-helper -- plan --nvidia legacy --desktop gnome --json
 cargo run -p bootcraft-helper -- apps --packs development      # where each app would come from
 cargo run -p bootcraft-helper -- plan --packs creative,gaming --apps comfypilot,gimp:flatpak
+cargo run -p bootcraft-helper -- plan --packs creative --script > setup.sh   # as a bash script
 
 cargo build && sudo target/debug/bootcraft-helper apply --select media.codecs
 ```
@@ -99,6 +114,11 @@ from out-of-date databases is unsupported there.
 cargo test                 # unit tests + fixture-based snapshot tests
 cargo insta review         # after an intended change to a plan snapshot
 cargo clippy --all-targets
+
+# Check every package name against a distribution's real repositories, in a
+# container (add --install to also install a few tasks for real):
+cargo build --release -p bootcraft-helper --target x86_64-unknown-linux-musl
+scripts/check-packages.sh fedora        # arch, fedora, debian, ubuntu-24.04, ubuntu-26.04
 
 # The app without a window: save a screenshot (optionally of page N, with
 # workflows ticked, or mid-way through a sample run) and quit.

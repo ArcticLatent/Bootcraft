@@ -14,6 +14,7 @@ pub mod plan;
 pub mod probe;
 pub mod protocol;
 pub mod release;
+pub mod script;
 pub mod system;
 pub mod task;
 

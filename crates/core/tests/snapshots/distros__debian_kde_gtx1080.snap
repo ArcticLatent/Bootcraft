@@ -1,0 +1,44 @@
+---
+source: crates/core/tests/distros.rs
+expression: "tasks_plan(&sys, ids)"
+---
+Bootcraft plan for Debian (11 tasks)
+
+[1/11] Let burce use sudo  (debian.sudo)
+    $ apt-get install -y sudo
+    $ usermod -aG sudo burce
+
+[2/11] Enable contrib and non-free  (debian.sources)
+    $ edit /etc/apt/sources.list.d/debian.sources: add the contrib, non-free, non-free-firmware components to every source (if the file exists)
+    $ edit /etc/apt/sources.list: add the contrib, non-free, non-free-firmware components to every source (if the file exists)
+
+[3/11] Update the system  (system.update)
+    $ env DEBIAN_FRONTEND=noninteractive apt-get -y -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold -o DPkg::Lock::Timeout=300 update
+    $ env DEBIAN_FRONTEND=noninteractive apt-get -y -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold -o DPkg::Lock::Timeout=300 full-upgrade
+
+[4/11] NVIDIA driver (Debian's 550)  (gpu.nvidia)
+    $ apt-get install -y linux-headers-amd64 nvidia-kernel-dkms nvidia-driver firmware-misc-nonfree
+
+[5/11] Hardware video decoding on NVIDIA  (gpu.nvidia-vaapi)
+    $ apt-get install -y nvidia-vaapi-driver
+
+[6/11] Flatpak with Flathub  (flatpak.flathub)
+    $ apt-get install -y flatpak plasma-discover-backend-flatpak
+    $ flatpak remote-add --if-not-exists --system flathub https://dl.flathub.org/repo/flathub.flatpakrepo
+
+[7/11] Media codecs and thumbnails  (media.codecs)
+    $ apt-get install -y ffmpeg gstreamer1.0-libav gstreamer1.0-plugins-good gstreamer1.0-plugins-bad gstreamer1.0-plugins-ugly gstreamer1.0-vaapi ffmpegthumbnailer
+
+[8/11] Archive tools  (tools.archive)
+    $ apt-get install -y 7zip unrar unzip zip
+
+[9/11] NTFS and exFAT drives  (tools.drives)
+    $ apt-get install -y ntfs-3g exfatprogs
+
+[10/11] Fonts for every language and emoji  (system.fonts)
+    $ apt-get install -y fonts-noto-core fonts-noto-cjk fonts-noto-color-emoji
+
+[11/11] Firmware updates  (system.firmware)
+    $ apt-get install -y fwupd
+
+A reboot is required afterwards.

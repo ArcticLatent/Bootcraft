@@ -164,8 +164,9 @@ fn selection_errors_are_specific() {
     );
     assert!(matches!(Selection::from_packs(&catalog, &["office"]), Err(PlanError::UnknownPack(_))));
 
-    // Distributions whose system tasks aren't ported yet can't plan apps that need them.
+    // On Ubuntu, GIMP comes from Flathub (Auto) and pulls in the Flathub task.
     let (_u, ubuntu) = system(UBUNTU_2404, RTX_4070);
-    let result = plan(&ubuntu, &bootcraft_core::catalog::catalog(&ubuntu), &pick("gimp", None));
-    assert!(matches!(result, Err(PlanError::MissingRequirement { .. })), "{result:?}");
+    let plan = plan(&ubuntu, &bootcraft_core::catalog::catalog(&ubuntu), &pick("gimp", None)).unwrap();
+    let ids: Vec<&str> = plan.tasks.iter().map(|t| t.id.as_str()).collect();
+    assert_eq!(ids, ["flatpak.flathub", "app.gimp"]);
 }

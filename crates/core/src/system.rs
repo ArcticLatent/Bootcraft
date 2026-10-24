@@ -229,6 +229,8 @@ pub struct System {
     pub memory_bytes: Option<u64>,
     /// Space available to the user on the root filesystem.
     pub disk_free_bytes: Option<u64>,
+    /// The person setting up the machine (not root), when known.
+    pub user: Option<String>,
 }
 
 impl System {

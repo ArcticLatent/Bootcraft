@@ -1,0 +1,38 @@
+---
+source: crates/core/tests/distros.rs
+expression: "tasks_plan(&sys, ids)"
+---
+Bootcraft plan for Fedora (10 tasks)
+
+[1/10] Faster downloads in dnf  (fedora.dnf-tweaks)
+    $ edit /etc/dnf/dnf.conf: set max_parallel_downloads=10 in [main]
+
+[2/10] Update the system  (system.update)
+    $ dnf -y upgrade --refresh
+
+[3/10] RPM Fusion repositories  (fedora.rpmfusion)
+    $ dnf install -y https://mirrors.rpmfusion.org/free/fedora/rpmfusion-free-release-44.noarch.rpm  (skipped if rpmfusion-free-release is already installed)
+    $ dnf install -y https://mirrors.rpmfusion.org/nonfree/fedora/rpmfusion-nonfree-release-44.noarch.rpm  (skipped if rpmfusion-nonfree-release is already installed)
+
+[4/10] Hardware video decoding (AMD/Intel)  (gpu.mesa-freeworld)
+    $ dnf swap -y mesa-va-drivers mesa-va-drivers-freeworld --allowerasing
+
+[5/10] Flatpak with Flathub  (flatpak.flathub)
+    $ dnf install -y flatpak
+    $ flatpak remote-add --if-not-exists --system flathub https://dl.flathub.org/repo/flathub.flatpakrepo
+
+[6/10] Media codecs and thumbnails  (media.codecs)
+    $ dnf swap -y ffmpeg-free ffmpeg --allowerasing
+    $ dnf install -y gstreamer1-plugins-bad-freeworld gstreamer1-plugins-ugly gstreamer1-plugin-libav gstreamer1-plugin-openh264 ffmpegthumbnailer
+
+[7/10] Archive tools  (tools.archive)
+    $ dnf install -y 7zip unrar unzip zip
+
+[8/10] NTFS and exFAT drives  (tools.drives)
+    $ dnf install -y ntfs-3g exfatprogs
+
+[9/10] Fonts for every language and emoji  (system.fonts)
+    $ dnf install -y google-noto-sans-fonts google-noto-serif-fonts google-noto-sans-cjk-fonts google-noto-color-emoji-fonts
+
+[10/10] Firmware updates  (system.firmware)
+    $ dnf install -y fwupd

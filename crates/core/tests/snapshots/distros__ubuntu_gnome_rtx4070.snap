@@ -1,0 +1,43 @@
+---
+source: crates/core/tests/distros.rs
+expression: "tasks_plan(&sys, ids)"
+---
+Bootcraft plan for Ubuntu (10 tasks)
+
+[1/10] Enable universe and multiverse  (ubuntu.multiverse)
+    $ edit /etc/apt/sources.list.d/ubuntu.sources: add the universe, multiverse components to every source (if the file exists)
+    $ edit /etc/apt/sources.list: add the universe, multiverse components to every source (if the file exists)
+
+[2/10] Update the system  (system.update)
+    $ env DEBIAN_FRONTEND=noninteractive apt-get -y -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold -o DPkg::Lock::Timeout=300 update
+    $ env DEBIAN_FRONTEND=noninteractive apt-get -y -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold -o DPkg::Lock::Timeout=300 full-upgrade
+
+[3/10] NVIDIA driver (open kernel modules)  (gpu.nvidia)
+    $ apt-get install -y ubuntu-drivers-common
+    $ apt-get install -y the newest nvidia-driver-<branch>-open that ubuntu-drivers lists
+
+[4/10] Hardware video decoding on NVIDIA  (gpu.nvidia-vaapi)
+    $ apt-get install -y nvidia-vaapi-driver
+
+[5/10] Flatpak with Flathub  (flatpak.flathub)
+    $ apt-get install -y flatpak gnome-software-plugin-flatpak
+    $ flatpak remote-add --if-not-exists --system flathub https://dl.flathub.org/repo/flathub.flatpakrepo
+
+[6/10] Media codecs and thumbnails  (media.codecs)
+    $ write /var/cache/bootcraft/mscorefonts.debconf
+    $ debconf-set-selections /var/cache/bootcraft/mscorefonts.debconf  (skipped if ttf-mscorefonts-installer is already installed)
+    $ apt-get install -y ubuntu-restricted-extras gstreamer1.0-vaapi ffmpegthumbnailer
+
+[7/10] Archive tools  (tools.archive)
+    $ apt-get install -y 7zip unrar unzip zip
+
+[8/10] NTFS and exFAT drives  (tools.drives)
+    $ apt-get install -y ntfs-3g exfatprogs
+
+[9/10] Fonts for every language and emoji  (system.fonts)
+    $ apt-get install -y fonts-noto-core fonts-noto-cjk fonts-noto-color-emoji
+
+[10/10] Firmware updates  (system.firmware)
+    $ apt-get install -y fwupd
+
+A reboot is required afterwards.

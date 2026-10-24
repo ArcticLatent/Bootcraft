@@ -17,6 +17,7 @@ pub fn dispatch(command: &str, args: &Value) -> Result<Value, String> {
         "catalog" => Ok(catalog_info(&system(args), preference(args))),
         "plan" => plan_info(&system(args), args),
         "export_plan" => export_plan(&system(args), args),
+        "download_size" => Ok(crate::sizes::download_size(&system(args), args)),
         "apply" => crate::helper::start(args),
         "cancel" => crate::helper::cancel(),
         "app_icons" => Ok(crate::icons::fetch(args)),
@@ -200,11 +201,23 @@ fn plan_info(sys: &System, args: &Value) -> Result<Value, String> {
     }))
 }
 
+/// The plan as a runnable bash script (see `bootcraft_core::script`).
 fn export_plan(sys: &System, args: &Value) -> Result<Value, String> {
+    use std::os::unix::fs::PermissionsExt;
+
     let path = args["path"].as_str().ok_or("no file chosen")?;
     let catalog = catalog(sys);
     let plan = plan(sys, &catalog, &selection(args)).map_err(|e| e.to_string())?;
-    std::fs::write(path, plan.render()).map_err(|e| format!("{path}: {e}"))?;
+    let date = std::process::Command::new("date")
+        .arg("+%Y-%m-%d %H:%M")
+        .output()
+        .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_owned())
+        .unwrap_or_default();
+    let mut resolve = bootcraft_core::script::resolve_signed(plan.distro);
+    let script = bootcraft_core::script::to_script(&plan, Path::new("/"), &date, &mut resolve);
+    std::fs::write(path, script).map_err(|e| format!("{path}: {e}"))?;
+    std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o755))
+        .map_err(|e| format!("{path}: {e}"))?;
     Ok(json!({ "path": path }))
 }
 

@@ -43,8 +43,10 @@ pub fn apply(root: &Path, sys: &System, selection: &Selection, yes: bool) -> Exi
     let mut formatter = Formatter::default();
     let summary = executor.execute(&plan, &mut |event| {
         log.write(&event);
+        // The plan was printed already; the formatter still needs its titles.
+        let lines = formatter.lines(&event);
         if !matches!(event, Event::Plan { .. }) {
-            for line in formatter.lines(&event) {
+            for line in lines {
                 println!("{line}");
             }
         }

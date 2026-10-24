@@ -40,8 +40,7 @@ impl Probe {
         let db = match distro {
             Distro::Arch => pacman_db(root),
             Distro::Ubuntu | Distro::Mint | Distro::Debian => dpkg_db(root),
-            // The rpm database is not a plain file; read via rpm once Fedora is ported.
-            Distro::Fedora => None,
+            Distro::Fedora => rpm_db(root),
         };
         Self { root: root.to_owned(), db }
     }
@@ -77,9 +76,18 @@ impl Probe {
         Some(matches)
     }
 
+    /// An absolute path inside the probed root.
+    fn rooted(&self, path: &Path) -> PathBuf {
+        self.root.join(path.strip_prefix("/").unwrap_or(path))
+    }
+
+    fn read(&self, path: &Path) -> Option<String> {
+        fs::read_to_string(self.rooted(path)).ok()
+    }
+
     fn step_done(&self, step: &Step) -> Option<bool> {
         match step {
-            Step::Install { unless, .. } | Step::AurInstall { unless, .. }
+            Step::Install { unless, .. } | Step::AurInstall { unless, .. } | Step::Run { unless, .. }
                 if unless.iter().any(|p| self.is_installed(p) == Some(true)) =>
             {
                 Some(true)
@@ -108,7 +116,32 @@ impl Probe {
                 let wants = fs::read_dir(self.root.join("etc/systemd/system")).ok()?;
                 Some(wants.flatten().any(|dir| dir.path().join(unit).exists()))
             }
-            Step::SignedPackage { package, .. } => self.is_installed(package),
+            Step::SignedPackage { package, .. } | Step::Swap { to: package, .. } => {
+                self.is_installed(package)
+            }
+            Step::WriteFile { path, contents } => Some(self.read(path).is_some_and(|text| &text == contents)),
+            Step::Download { path, sha256, .. } => Some(
+                crate::release::sha256_file(&self.rooted(path))
+                    .is_ok_and(|sum| sum.eq_ignore_ascii_case(sha256)),
+            ),
+            Step::AddToGroup { user, group } => {
+                let groups = self.read(Path::new("/etc/group"))?;
+                Some(group_members(&groups, group).iter().any(|member| member == user))
+            }
+            Step::ForeignArch { arch } => {
+                let arches = self.read(Path::new("/var/lib/dpkg/arch")).unwrap_or_default();
+                Some(arches.lines().any(|line| line.trim() == arch))
+            }
+            Step::RemoveSnaps => {
+                if self.is_installed("snapd")? {
+                    let snaps = fs::read_dir(self.root.join("var/lib/snapd/snaps")).ok()?;
+                    Some(!snaps.flatten().any(|e| e.file_name().to_string_lossy().ends_with(".snap")))
+                } else {
+                    Some(true)
+                }
+            }
+            // Any NVIDIA driver from the Ubuntu archive counts.
+            Step::UbuntuDriver { .. } => Some(!self.installed_matching("nvidia-driver-*")?.is_empty()),
             Step::Run { .. } => None,
         }
     }
@@ -158,7 +191,66 @@ fn dpkg_db(root: &Path) -> Option<PackageDb> {
     Some(db)
 }
 
+/// The rpm database isn't a plain file; ask rpm for every package and what it provides.
+fn rpm_db(root: &Path) -> Option<PackageDb> {
+    let out = std::process::Command::new("rpm")
+        .arg("--root")
+        .arg(root)
+        .args(["-qa", "--qf", "N %{NAME}\\n[P %{PROVIDENAME}\\n]"])
+        .output()
+        .ok()?;
+    out.status.success().then(|| parse_rpm_query(&String::from_utf8_lossy(&out.stdout)))
+}
+
+/// Output of `rpm -qa --qf 'N %{NAME}\n[P %{PROVIDENAME}\n]'`.
+fn parse_rpm_query(text: &str) -> PackageDb {
+    let mut db = PackageDb::default();
+    for line in text.lines() {
+        if let Some(name) = line.strip_prefix("N ") {
+            db.names.insert(name.to_owned());
+            db.provided.insert(name.to_owned());
+        } else if let Some(provide) = line.strip_prefix("P ") {
+            db.provided.insert(strip_version(provide).to_owned());
+        }
+    }
+    db
+}
+
+/// Members of `group` in an /etc/group file.
+fn group_members(groups: &str, group: &str) -> Vec<String> {
+    groups
+        .lines()
+        .find_map(|line| {
+            let fields: Vec<&str> = line.split(':').collect();
+            (fields.len() >= 4 && fields[0] == group).then(|| fields[3].to_owned())
+        })
+        .map(|members| members.split(',').filter(|m| !m.is_empty()).map(str::to_owned).collect())
+        .unwrap_or_default()
+}
+
 /// `foo=1.2`, `foo>=1` or `foo (= 1.2)` -> `foo`.
 pub fn strip_version(dep: &str) -> &str {
     dep.split(['=', '<', '>', ' ', '(']).next().unwrap_or(dep).trim()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn rpm_query_output() {
+        let db =
+            parse_rpm_query("N akmod-nvidia\nP akmod-nvidia\nP nvidia-kmod-common = 3:615\nN ffmpeg-free\n");
+        assert!(db.names.contains("akmod-nvidia") && db.names.contains("ffmpeg-free"));
+        assert!(db.provided.contains("nvidia-kmod-common"));
+        assert!(!db.names.contains("nvidia-kmod-common"));
+    }
+
+    #[test]
+    fn group_membership() {
+        let groups = "root:x:0:\nsudo:x:27:alice,bob\nusers:x:100:\n";
+        assert_eq!(group_members(groups, "sudo"), ["alice", "bob"]);
+        assert!(group_members(groups, "users").is_empty());
+        assert!(group_members(groups, "wheel").is_empty());
+    }
 }

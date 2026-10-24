@@ -9,6 +9,7 @@ mod commands;
 mod helper;
 mod icons;
 mod qt_app;
+mod sizes;
 
 use cxx_qt_lib::{QGuiApplication, QQmlApplicationEngine, QString, QUrl};
 

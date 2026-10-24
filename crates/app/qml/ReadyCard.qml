@@ -47,7 +47,8 @@ Rectangle {
                 const apps = Setup.appCount === 1 ? "1 app" : Setup.appCount + " apps";
                 const changes = Setup.systemCount === 1 ? "1 system change" : Setup.systemCount + " system changes";
                 const restart = Setup.plan && Setup.plan.reboot ? " · restart likely" : "";
-                return apps + " · " + changes + restart;
+                const size = Setup.downloadLabel();
+                return apps + (size ? " (" + size + ")" : "") + " · " + changes + restart;
             }
             color: Setup.planError ? Theme.warning : Theme.textMuted
             font.pixelSize: 14
@@ -69,7 +70,7 @@ Rectangle {
 
             LinkButton {
                 icon: "file-code"
-                label: "Export plan"
+                label: "Export script"
                 fontSize: 13
                 enabled: Setup.plan !== null
                 onClicked: saveDialog.open()
@@ -91,11 +92,11 @@ Rectangle {
 
     FileDialog {
         id: saveDialog
-        title: "Export setup plan"
+        title: "Export setup script"
         fileMode: FileDialog.SaveFile
-        defaultSuffix: "txt"
-        currentFile: StandardPaths.writableLocation(StandardPaths.HomeLocation) + "/bootcraft-plan.txt"
-        nameFilters: ["Text files (*.txt)"]
+        defaultSuffix: "sh"
+        currentFile: StandardPaths.writableLocation(StandardPaths.HomeLocation) + "/bootcraft-setup.sh"
+        nameFilters: ["Shell scripts (*.sh)"]
         onAccepted: {
             const path = decodeURIComponent(selectedFile.toString().replace(/^file:\/\//, ""));
             Setup.exportPlan(path).then(r => note.text = "Saved to " + r.path).catch(e => note.text = String(e));

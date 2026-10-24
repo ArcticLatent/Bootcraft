@@ -24,7 +24,7 @@ use crate::probe::{Probe, Status};
 use crate::protocol::{Event, Outcome, PlanEntry};
 use crate::release;
 use crate::system::{Distro, System};
-use crate::task::Step;
+use crate::task::{APT_GET, Step};
 
 pub struct Summary {
     pub ok: bool,
@@ -38,6 +38,9 @@ pub struct Executor<R: Runner> {
     runner: R,
     user: Option<User>,
     cancel: Arc<AtomicBool>,
+    /// apt: package lists are current (`apt-get update` ran after the last
+    /// change to the sources).
+    apt_fresh: bool,
 }
 
 /// Why a step stopped the task.
@@ -53,6 +56,7 @@ impl<R: Runner> Executor<R> {
             runner,
             user,
             cancel: Arc::new(AtomicBool::new(false)),
+            apt_fresh: false,
         })
     }
 
@@ -132,12 +136,26 @@ impl<R: Runner> Executor<R> {
         Probe::new(&self.root, self.distro)
     }
 
-    /// An upgrade removed the running kernel's modules, so new modules
-    /// (including freshly built drivers) only load after a reboot.
+    /// A new kernel (or a driver built for one) only takes effect after a reboot.
     fn kernel_replaced(&self) -> bool {
-        self.distro == Distro::Arch
-            && !self.kernel_release.is_empty()
-            && !self.root.join("usr/lib/modules").join(&self.kernel_release).is_dir()
+        let modules = self.root.join("usr/lib/modules");
+        match self.distro {
+            // pacman removes the running kernel's modules when it upgrades it.
+            Distro::Arch => !self.kernel_release.is_empty() && !modules.join(&self.kernel_release).is_dir(),
+            // Debian's packages flag it themselves.
+            Distro::Debian | Distro::Ubuntu | Distro::Mint => self.root.join("run/reboot-required").exists(),
+            // Fedora keeps old kernels: is the newest installed one running?
+            Distro::Fedora => {
+                let newest = fs::read_dir(&modules).ok().and_then(|entries| {
+                    entries
+                        .flatten()
+                        .filter(|e| e.path().join("vmlinuz").exists())
+                        .max_by_key(|e| e.metadata().and_then(|m| m.modified()).ok())
+                        .map(|e| e.file_name().to_string_lossy().into_owned())
+                });
+                newest.is_some_and(|newest| newest != self.kernel_release)
+            }
+        }
     }
 
     fn step(&mut self, step: &Step, emit: &mut dyn FnMut(Event)) -> Result<(), StepError> {
@@ -204,14 +222,49 @@ impl<R: Runner> Executor<R> {
                 }
                 self.edit(path, edit, emit)
             }
+            Step::WriteFile { path, contents } => self.write_file(path, contents, emit),
+            Step::Download { url, path, sha256 } => self.download(url, path, sha256, emit),
+            Step::Swap { from, to } => {
+                if probe.is_installed(to) == Some(true) {
+                    note(emit, &format!("{to} is already installed."));
+                    return Ok(());
+                }
+                if probe.is_installed(from) == Some(true) {
+                    self.run(
+                        Cmd::new(["dnf", "swap", "-y", from.as_str(), to.as_str(), "--allowerasing"]),
+                        emit,
+                    )
+                } else {
+                    self.run(Cmd::new(["dnf", "install", "-y", "--allowerasing", to.as_str()]), emit)
+                }
+            }
+            Step::AddToGroup { user, group } => {
+                self.run(Cmd::new(["usermod", "-aG", group.as_str(), user.as_str()]), emit)?;
+                note(emit, &format!("{user} is now in the {group} group; it applies from the next login."));
+                Ok(())
+            }
+            Step::ForeignArch { arch } => {
+                self.apt_fresh = false;
+                self.run(Cmd::new(["dpkg", "--add-architecture", arch.as_str()]), emit)
+            }
+            Step::RemoveSnaps => self.remove_snaps(emit),
+            Step::UbuntuDriver { open, max_branch } => self.ubuntu_driver(*open, *max_branch, emit),
             Step::EnableService { unit } => {
                 self.run(Cmd::new(["systemctl", "enable", "--now", unit.as_str()]), emit)
             }
-            Step::Run { argv } => {
+            Step::Run { unless, .. } if unless.iter().any(|p| probe.is_installed(p) == Some(true)) => {
+                note(emit, "Not needed; already installed.");
+                Ok(())
+            }
+            Step::Run { argv, .. } => {
                 if self.distro == Distro::Arch && argv.first().is_some_and(|a| a == "pacman") {
                     self.check_pacman_lock()?;
                 }
-                self.run(Cmd::new(argv.clone()), emit)
+                self.run(Cmd::new(argv.clone()), emit)?;
+                if argv.iter().any(|a| a == "apt-get") && argv.iter().any(|a| a == "update") {
+                    self.apt_fresh = true;
+                }
+                Ok(())
             }
         }
     }
@@ -306,18 +359,99 @@ impl<R: Runner> Executor<R> {
         self.pacman(&args, files, emit)
     }
 
+    /// `apt-get <args> <packages>`, refreshing the package lists first when
+    /// the sources changed (or nothing refreshed them yet in this run).
+    fn apt(
+        &mut self,
+        args: &[&str],
+        packages: &[String],
+        emit: &mut dyn FnMut(Event),
+    ) -> Result<(), StepError> {
+        if !self.apt_fresh {
+            self.run(Cmd::new(APT_GET.iter().copied().chain(["update"])), emit)?;
+            self.apt_fresh = true;
+        }
+        let argv =
+            APT_GET.iter().copied().chain(args.iter().copied()).chain(packages.iter().map(String::as_str));
+        self.run(Cmd::new(argv), emit)
+    }
+
+    fn dnf(
+        &mut self,
+        args: &[&str],
+        packages: &[String],
+        emit: &mut dyn FnMut(Event),
+    ) -> Result<(), StepError> {
+        let argv =
+            ["dnf", "-y"].into_iter().chain(args.iter().copied()).chain(packages.iter().map(String::as_str));
+        self.run(Cmd::new(argv), emit)
+    }
+
     fn install(&mut self, packages: &[String], emit: &mut dyn FnMut(Event)) -> Result<(), StepError> {
         match self.distro {
             Distro::Arch => self.pacman(&["-S", "--needed", "--noconfirm"], packages, emit),
-            other => Err(format!("installing packages on {} is not implemented yet", other.name())),
+            Distro::Fedora => self.dnf(&["install"], packages, emit),
+            Distro::Debian | Distro::Ubuntu | Distro::Mint => self.apt(&["install"], packages, emit),
         }
     }
 
     fn remove(&mut self, packages: &[String], emit: &mut dyn FnMut(Event)) -> Result<(), StepError> {
         match self.distro {
             Distro::Arch => self.pacman(&["-Rns", "--noconfirm"], packages, emit),
-            other => Err(format!("removing packages on {} is not implemented yet", other.name())),
+            Distro::Fedora => self.dnf(&["remove"], packages, emit),
+            Distro::Debian | Distro::Ubuntu | Distro::Mint => self.apt(&["remove"], packages, emit),
         }
+    }
+
+    /// Remove every snap. A snap others depend on (core, gnome, mesa...)
+    /// refuses to go until they are gone, so retry the rest each round.
+    fn remove_snaps(&mut self, emit: &mut dyn FnMut(Event)) -> Result<(), StepError> {
+        loop {
+            let snaps = match self.runner.capture(&Cmd::new(["snap", "list"])) {
+                Ok((true, list)) => list
+                    .lines()
+                    .skip(1)
+                    .filter_map(|l| l.split_whitespace().next())
+                    .map(str::to_owned)
+                    .collect(),
+                // No snap command, or snapd isn't running: nothing to remove.
+                _ => Vec::<String>::new(),
+            };
+            if snaps.is_empty() {
+                emit(Event::Output { line: "No snaps left.".into() });
+                return Ok(());
+            }
+            let mut removed = 0;
+            for snap in &snaps {
+                if self.run(Cmd::new(["snap", "remove", "--purge", snap.as_str()]), emit).is_ok() {
+                    removed += 1;
+                }
+            }
+            if removed == 0 {
+                return Err(format!("these snaps could not be removed: {}", snaps.join(", ")));
+            }
+        }
+    }
+
+    /// Install the newest driver `ubuntu-drivers` lists for this card.
+    fn ubuntu_driver(
+        &mut self,
+        open: bool,
+        max_branch: Option<u32>,
+        emit: &mut dyn FnMut(Event),
+    ) -> Result<(), StepError> {
+        let list = match self.runner.capture(&Cmd::new(["ubuntu-drivers", "list"])) {
+            Ok((true, list)) => list,
+            _ => return Err("ubuntu-drivers could not list drivers for this card".into()),
+        };
+        let package = pick_ubuntu_driver(&list, open, max_branch).ok_or_else(|| {
+            format!(
+                "ubuntu-drivers lists no {} NVIDIA driver for this card",
+                if open { "open-module" } else { "suitable" }
+            )
+        })?;
+        emit(Event::Output { line: format!("Chose {package}.") });
+        self.apt(&["install"], &[package], emit)
     }
 
     fn aur_install(
@@ -424,8 +558,51 @@ impl<R: Runner> Executor<R> {
         emit(Event::Output { line: format!("{}: checksum verified.", asset.name) });
         match self.distro {
             Distro::Arch => self.pacman_upgrade(&[file_str], false, emit),
-            other => Err(format!("installing packages on {} is not implemented yet", other.name())),
+            // dnf and apt install a local file with its dependencies, and act on
+            // the package's Obsoletes/Replaces themselves.
+            Distro::Fedora => self.dnf(&["install"], &[file_str], emit),
+            Distro::Debian | Distro::Ubuntu | Distro::Mint => self.apt(&["install"], &[file_str], emit),
         }
+    }
+
+    fn write_file(
+        &mut self,
+        path: &Path,
+        contents: &str,
+        emit: &mut dyn FnMut(Event),
+    ) -> Result<(), StepError> {
+        let target = self.root.join(path.strip_prefix("/").unwrap_or(path));
+        if fs::read_to_string(&target).is_ok_and(|text| text == contents) {
+            emit(Event::Output { line: format!("{} is already up to date.", path.display()) });
+            return Ok(());
+        }
+        let original = fs::read_to_string(&target).ok();
+        self.replace_file(path, original.as_deref(), contents)?;
+        emit(Event::Output { line: format!("Wrote {}", path.display()) });
+        Ok(())
+    }
+
+    fn download(
+        &mut self,
+        url: &str,
+        path: &Path,
+        sha256: &str,
+        emit: &mut dyn FnMut(Event),
+    ) -> Result<(), StepError> {
+        let target = self.root.join(path.strip_prefix("/").unwrap_or(path));
+        let fail = |e: io::Error| format!("{}: {e}", path.display());
+        if let Some(parent) = target.parent() {
+            fs::create_dir_all(parent).map_err(fail)?;
+        }
+        let target_str = target.to_string_lossy().into_owned();
+        self.run(Cmd::new(["curl", "-fL", "--max-time", "600", "-o", &target_str, url]), emit)?;
+        let digest = release::sha256_file(&target).map_err(fail)?;
+        if !digest.eq_ignore_ascii_case(sha256) {
+            let _ = fs::remove_file(&target);
+            return Err(format!("{} does not match its pinned checksum; it was deleted", path.display()));
+        }
+        emit(Event::Output { line: format!("{}: checksum verified.", path.display()) });
+        Ok(())
     }
 
     fn edit(&mut self, path: &Path, edit: &Edit, emit: &mut dyn FnMut(Event)) -> Result<(), StepError> {
@@ -442,8 +619,18 @@ impl<R: Runner> Executor<R> {
             return Ok(());
         }
         let updated = edit.apply(text);
+        self.replace_file(path, original.as_deref(), &updated)?;
+        emit(Event::Output { line: format!("Updated {}: {edit}", path.display()) });
+        Ok(())
+    }
+
+    /// Write `contents` atomically (a sibling file, then rename), keeping the
+    /// file's mode and the first original as `<path>.bootcraft.bak`.
+    fn replace_file(&mut self, path: &Path, original: Option<&str>, contents: &str) -> Result<(), StepError> {
+        let target = self.root.join(path.strip_prefix("/").unwrap_or(path));
+        let fail = |e: io::Error| format!("{}: {e}", path.display());
         let mode = fs::metadata(&target).map_or(0o644, |m| m.permissions().mode() & 0o7777);
-        if let Some(original) = &original {
+        if let Some(original) = original {
             // Keep the first original around; later runs must not overwrite it.
             let backup = PathBuf::from(format!("{}.bootcraft.bak", target.display()));
             if !backup.exists() {
@@ -452,15 +639,37 @@ impl<R: Runner> Executor<R> {
         } else if let Some(parent) = target.parent() {
             fs::create_dir_all(parent).map_err(fail)?;
         }
-        // Write a sibling and rename, so the file is never half-written.
         let file_name = target.file_name().unwrap_or_default().to_string_lossy();
         let temp = target.with_file_name(format!(".{file_name}.bootcraft.tmp"));
-        fs::write(&temp, updated).map_err(fail)?;
+        fs::write(&temp, contents).map_err(fail)?;
         fs::set_permissions(&temp, fs::Permissions::from_mode(mode)).map_err(fail)?;
         fs::rename(&temp, &target).map_err(fail)?;
-        emit(Event::Output { line: format!("Updated {}: {edit}", path.display()) });
+        if path.starts_with("/etc/apt") {
+            self.apt_fresh = false;
+        }
         Ok(())
     }
+}
+
+/// The package to install from `ubuntu-drivers list` output: the newest
+/// `nvidia-driver-<branch>-open` (open modules), or the newest proprietary
+/// `nvidia-driver-<branch>` up to `max_branch`. Server builds are skipped.
+fn pick_ubuntu_driver(list: &str, open: bool, max_branch: Option<u32>) -> Option<String> {
+    list.lines()
+        .filter_map(|line| {
+            // `nvidia-driver-580-open, (kernel modules provided by ...)`
+            let name = line.split([',', ' ']).next()?.trim();
+            let rest = name.strip_prefix("nvidia-driver-")?;
+            let (branch, is_open) = match rest.strip_suffix("-open") {
+                Some(branch) => (branch, true),
+                None => (rest, false),
+            };
+            let branch: u32 = branch.parse().ok()?;
+            (is_open == open && max_branch.is_none_or(|max| branch <= max))
+                .then_some((branch, name.to_owned()))
+        })
+        .max_by_key(|(branch, _)| *branch)
+        .map(|(_, name)| name)
 }
 
 /// A list field from `LC_ALL=C pacman -Qi(p)`, e.g. `Replaces : a b`, without
@@ -515,7 +724,20 @@ impl<R: Runner> aur::Resolver for ArchResolver<'_, R> {
 
 #[cfg(test)]
 mod tests {
-    use super::{package_field, package_file_name};
+    use super::{package_field, package_file_name, pick_ubuntu_driver};
+
+    #[test]
+    fn ubuntu_driver_choice() {
+        let list = "nvidia-driver-570-open, (kernel modules provided by linux-modules-nvidia-570-open-generic)\n\
+                    nvidia-driver-580-server-open, (kernel modules provided by nvidia-dkms-580-server-open)\n\
+                    nvidia-driver-580, (kernel modules provided by nvidia-dkms-580)\n\
+                    nvidia-driver-590-open\n\
+                    nvidia-driver-590\n";
+        assert_eq!(pick_ubuntu_driver(list, true, None).as_deref(), Some("nvidia-driver-590-open"));
+        assert_eq!(pick_ubuntu_driver(list, false, Some(580)).as_deref(), Some("nvidia-driver-580"));
+        assert_eq!(pick_ubuntu_driver(list, false, None).as_deref(), Some("nvidia-driver-590"));
+        assert_eq!(pick_ubuntu_driver("nvidia-driver-590-open\n", false, Some(580)), None);
+    }
 
     #[test]
     fn package_fields() {

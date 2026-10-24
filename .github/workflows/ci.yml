@@ -4,6 +4,9 @@ on:
   push:
     branches: [main]
   pull_request:
+  # Distributions rename and drop packages; catch it even without commits.
+  schedule:
+    - cron: "17 5 * * 1"
 
 jobs:
   core:
@@ -35,3 +38,20 @@ jobs:
           QT_FORCE_STDERR_LOGGING=1 QT_QPA_PLATFORM=offscreen QT_QUICK_BACKEND=software \
             timeout 120 target/debug/bootcraft --screenshot=/tmp/overview.png
           test -s /tmp/overview.png
+
+  packages:
+    name: package names (${{ matrix.distro }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        distro: [arch, fedora, debian, ubuntu-24.04, ubuntu-26.04]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-unknown-linux-musl
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo build --release -p bootcraft-helper --target x86_64-unknown-linux-musl
+      - name: Every package exists in the real repositories
+        run: CONTAINER=docker scripts/check-packages.sh ${{ matrix.distro }}

@@ -23,14 +23,18 @@ pub use os_release::{parse_os_release, read_os_release};
 pub struct Env {
     pub current_desktop: Option<String>,
     pub session_type: Option<String>,
+    /// The person's account, also when running under sudo or pkexec.
+    pub user: Option<String>,
 }
 
 impl Env {
     pub fn from_process() -> Self {
         let var = |name| std::env::var(name).ok().filter(|v: &String| !v.is_empty());
+        let pkexec_user = var("PKEXEC_UID").and_then(|uid| user_name(Path::new("/"), &uid));
         let mut env = Self {
             current_desktop: var("XDG_CURRENT_DESKTOP").or_else(|| var("DESKTOP_SESSION")),
             session_type: var("XDG_SESSION_TYPE"),
+            user: var("SUDO_USER").or(pkexec_user).or_else(|| var("USER")).filter(|u| u != "root"),
         };
         if env.current_desktop.is_none() {
             // Under sudo or pkexec the desktop variables are gone; ask logind
@@ -44,6 +48,15 @@ impl Env {
         }
         env
     }
+}
+
+/// The account name for `uid` in `<root>/etc/passwd`.
+fn user_name(root: &Path, uid: &str) -> Option<String> {
+    let passwd = fs::read_to_string(root.join("etc/passwd")).ok()?;
+    passwd.lines().find_map(|line| {
+        let fields: Vec<&str> = line.split(':').collect();
+        (fields.len() > 2 && fields[2] == uid).then(|| fields[0].to_owned())
+    })
 }
 
 fn logind_display_session(uid: &str) -> Option<String> {
@@ -78,6 +91,7 @@ pub fn detect(root: &Path, env: &Env) -> System {
             .any(|unit| root.join(unit).exists()),
         memory_bytes: memory(root),
         disk_free_bytes: rustix::fs::statvfs(root).ok().map(|fs| fs.f_bavail.saturating_mul(fs.f_frsize)),
+        user: env.user.clone(),
     }
 }
 

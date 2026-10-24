@@ -83,7 +83,11 @@ impl Fixture {
     }
 
     pub fn detect(&self, desktop: &str) -> System {
-        let env = Env { current_desktop: Some(desktop.into()), session_type: Some("wayland".into()) };
+        let env = Env {
+            current_desktop: Some(desktop.into()),
+            session_type: Some("wayland".into()),
+            user: Some("burce".into()),
+        };
         detect(self.root(), &env)
     }
 }

@@ -1,0 +1,39 @@
+---
+source: crates/core/tests/distros.rs
+expression: "tasks_plan(&sys, ids)"
+---
+Bootcraft plan for Linux Mint (9 tasks)
+
+[1/9] Update the system  (system.update)
+    $ env DEBIAN_FRONTEND=noninteractive apt-get -y -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold -o DPkg::Lock::Timeout=300 update
+    $ env DEBIAN_FRONTEND=noninteractive apt-get -y -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold -o DPkg::Lock::Timeout=300 full-upgrade
+
+[2/9] NVIDIA 580 legacy driver  (gpu.nvidia)
+    $ apt-get install -y ubuntu-drivers-common
+    $ apt-get install -y the newest nvidia-driver-<branch> that ubuntu-drivers lists, up to 580
+
+[3/9] Hardware video decoding on NVIDIA  (gpu.nvidia-vaapi)
+    $ apt-get install -y nvidia-vaapi-driver
+
+[4/9] Flatpak with Flathub  (flatpak.flathub)
+    $ apt-get install -y flatpak
+    $ flatpak remote-add --if-not-exists --system flathub https://dl.flathub.org/repo/flathub.flatpakrepo
+
+[5/9] Media codecs and thumbnails  (media.codecs)
+    $ write /var/cache/bootcraft/mscorefonts.debconf
+    $ debconf-set-selections /var/cache/bootcraft/mscorefonts.debconf  (skipped if ttf-mscorefonts-installer is already installed)
+    $ apt-get install -y mint-meta-codecs gstreamer1.0-vaapi ffmpegthumbnailer
+
+[6/9] Archive tools  (tools.archive)
+    $ apt-get install -y 7zip unrar unzip zip
+
+[7/9] NTFS and exFAT drives  (tools.drives)
+    $ apt-get install -y ntfs-3g exfatprogs
+
+[8/9] Fonts for every language and emoji  (system.fonts)
+    $ apt-get install -y fonts-noto-core fonts-noto-cjk fonts-noto-color-emoji
+
+[9/9] Firmware updates  (system.firmware)
+    $ apt-get install -y fwupd
+
+A reboot is required afterwards.

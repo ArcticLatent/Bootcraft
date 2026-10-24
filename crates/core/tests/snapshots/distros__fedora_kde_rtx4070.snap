@@ -1,0 +1,43 @@
+---
+source: crates/core/tests/distros.rs
+expression: "tasks_plan(&sys, ids)"
+---
+Bootcraft plan for Fedora (11 tasks)
+
+[1/11] Faster downloads in dnf  (fedora.dnf-tweaks)
+    $ edit /etc/dnf/dnf.conf: set max_parallel_downloads=10 in [main]
+
+[2/11] Update the system  (system.update)
+    $ dnf -y upgrade --refresh
+
+[3/11] RPM Fusion repositories  (fedora.rpmfusion)
+    $ dnf install -y https://mirrors.rpmfusion.org/free/fedora/rpmfusion-free-release-44.noarch.rpm  (skipped if rpmfusion-free-release is already installed)
+    $ dnf install -y https://mirrors.rpmfusion.org/nonfree/fedora/rpmfusion-nonfree-release-44.noarch.rpm  (skipped if rpmfusion-nonfree-release is already installed)
+
+[4/11] NVIDIA driver (open kernel modules)  (gpu.nvidia)
+    $ dnf install -y akmod-nvidia xorg-x11-drv-nvidia-cuda
+
+[5/11] Hardware video decoding on NVIDIA  (gpu.nvidia-vaapi)
+    $ dnf install -y libva-nvidia-driver
+
+[6/11] Flatpak with Flathub  (flatpak.flathub)
+    $ dnf install -y flatpak
+    $ flatpak remote-add --if-not-exists --system flathub https://dl.flathub.org/repo/flathub.flatpakrepo
+
+[7/11] Media codecs and thumbnails  (media.codecs)
+    $ dnf swap -y ffmpeg-free ffmpeg --allowerasing
+    $ dnf install -y gstreamer1-plugins-bad-freeworld gstreamer1-plugins-ugly gstreamer1-plugin-libav gstreamer1-plugin-openh264 ffmpegthumbnailer
+
+[8/11] Archive tools  (tools.archive)
+    $ dnf install -y 7zip unrar unzip zip
+
+[9/11] NTFS and exFAT drives  (tools.drives)
+    $ dnf install -y ntfs-3g exfatprogs
+
+[10/11] Fonts for every language and emoji  (system.fonts)
+    $ dnf install -y google-noto-sans-fonts google-noto-serif-fonts google-noto-sans-cjk-fonts google-noto-color-emoji-fonts
+
+[11/11] Firmware updates  (system.firmware)
+    $ dnf install -y fwupd
+
+A reboot is required afterwards.

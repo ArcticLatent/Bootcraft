@@ -3,6 +3,10 @@
 
 pub mod apps;
 mod arch;
+mod common;
+mod debian;
+mod fedora;
+mod ubuntu;
 
 pub use apps::{PACKS, Pack, pack};
 
@@ -39,12 +43,14 @@ impl Catalog {
     }
 }
 
-/// The catalog for this system. Distributions whose tasks have not been
-/// ported yet get no tasks, so their apps can be browsed but not planned.
+/// The catalog for this system; empty for unsupported distributions.
 pub fn catalog(sys: &System) -> Catalog {
     let tasks = match sys.distro() {
         Some(Distro::Arch) => arch::tasks(sys),
-        Some(Distro::Fedora | Distro::Ubuntu | Distro::Mint | Distro::Debian) | None => Vec::new(),
+        Some(Distro::Fedora) => fedora::tasks(sys),
+        Some(Distro::Debian) => debian::tasks(sys),
+        Some(Distro::Ubuntu | Distro::Mint) => ubuntu::tasks(sys),
+        None => Vec::new(),
     };
     let apps = if sys.distro().is_some() { apps::apps(sys) } else { Vec::new() };
     Catalog { tasks, apps }
@@ -58,8 +64,8 @@ pub fn app_requires(distro: Distro, app: &App, source: Source) -> Vec<&'static s
     let mut requires = match (&native.via, distro) {
         (Via::RpmFusion, _) => vec![FEDORA_RPMFUSION],
         (Via::Aur, _) => vec![UPDATE, ARCH_BUILD_TOOLS],
-        // Arch installs only from freshly synced databases; other
-        // distributions refresh their package lists in their own tasks.
+        // Arch installs only from freshly synced databases; dnf refreshes
+        // its metadata itself and the executor refreshes apt's lists.
         (Via::Repo | Via::SignedRelease { .. }, Distro::Arch) => vec![UPDATE],
         (Via::Repo | Via::SignedRelease { .. }, _) => Vec::new(),
     };

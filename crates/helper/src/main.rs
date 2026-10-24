@@ -2,6 +2,7 @@
 //! from a terminal. `detect`, `tasks` and `plan` change nothing; `apply` and
 //! `serve` run as root.
 
+mod packages;
 mod run;
 
 use std::path::PathBuf;
@@ -63,11 +64,19 @@ enum Command {
     /// Speak the JSON-lines protocol on stdin/stdout (used by the app via pkexec).
     #[command(hide = true)]
     Serve,
+    /// List every package name the catalog can install on this distribution,
+    /// across GPUs and desktops, as `<source> <name>` lines (for checking
+    /// them against the real repositories; see scripts/check-packages.sh).
+    #[command(hide = true)]
+    Packages,
 }
 
 /// What to run. Without options: the Essentials.
 #[derive(Args, Clone)]
 struct Choose {
+    /// Print the plan as a standalone bash script instead (with `plan`).
+    #[arg(long)]
+    script: bool,
     /// Workflows to add on top of the Essentials: creative, development, gaming.
     #[arg(long, value_delimiter = ',')]
     packs: Vec<String>,
@@ -140,6 +149,18 @@ fn main() -> ExitCode {
             let result = selection(&catalog, choose.clone(), cli.prefer.into())
                 .and_then(|selection| plan(&sys, &catalog, &selection));
             match result {
+                Ok(plan) if choose.script => {
+                    let mut resolve = bootcraft_core::script::resolve_signed(plan.distro);
+                    print!(
+                        "{}",
+                        bootcraft_core::script::to_script(
+                            &plan,
+                            &cli.root,
+                            "from the command line",
+                            &mut resolve
+                        )
+                    );
+                }
                 Ok(plan) if cli.json => print_json(&plan),
                 Ok(plan) => print!("{}", plan.render()),
                 Err(err) => {
@@ -159,6 +180,11 @@ fn main() -> ExitCode {
             };
         }
         Command::Serve => unreachable!("handled above"),
+        Command::Packages => {
+            for line in packages::all(&sys) {
+                println!("{line}");
+            }
+        }
     }
     ExitCode::SUCCESS
 }

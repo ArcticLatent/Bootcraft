@@ -104,6 +104,21 @@ impl Task {
     }
 }
 
+/// apt-get without questions: keep changed config files, and wait for a lock
+/// held by unattended upgrades instead of failing.
+pub const APT_GET: &[&str] = &[
+    "env",
+    "DEBIAN_FRONTEND=noninteractive",
+    "apt-get",
+    "-y",
+    "-o",
+    "Dpkg::Options::=--force-confdef",
+    "-o",
+    "Dpkg::Options::=--force-confold",
+    "-o",
+    "DPkg::Lock::Timeout=300",
+];
+
 /// One unit of work. Steps are data so the full plan can be reviewed before
 /// anything runs, and so the helper never executes a shell string.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -145,10 +160,38 @@ pub enum Step {
         #[serde(default, skip_serializing_if = "std::ops::Not::not")]
         if_exists: bool,
     },
+    /// Write a small file whole (an apt source, a sysctl setting). The first
+    /// original is kept as `<path>.bootcraft.bak`.
+    WriteFile { path: PathBuf, contents: String },
+    /// Download a file and check it against a pinned SHA-256.
+    Download { url: String, path: PathBuf, sha256: String },
+    /// Fedora: replace one package with another (`dnf swap`), e.g. Fedora's
+    /// patent-free ffmpeg with RPM Fusion's.
+    Swap { from: String, to: String },
+    /// Add a user to a group, e.g. Debian's `sudo`.
+    AddToGroup { user: String, group: String },
+    /// Debian family: enable packages of another architecture (i386 for Steam).
+    ForeignArch { arch: String },
+    /// Ubuntu: remove every snap (leaves before the snaps they depend on).
+    RemoveSnaps,
+    /// Ubuntu and Mint: install the newest NVIDIA driver `ubuntu-drivers` offers
+    /// for this card: the open-module build, or the proprietary one up to
+    /// `max_branch` (580 for the legacy cards).
+    UbuntuDriver {
+        open: bool,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        max_branch: Option<u32>,
+    },
     /// Enable and start a systemd unit.
     EnableService { unit: String },
-    /// Run a program. Arguments are passed as-is; there is no shell.
-    Run { argv: Vec<String> },
+    /// Run a program. Arguments are passed as-is; there is no shell. Whether
+    /// it already ran can't be known, so it runs every time unless one of
+    /// `unless` (packages or provides) is installed.
+    Run {
+        argv: Vec<String>,
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        unless: Vec<String>,
+    },
 }
 
 impl Step {
@@ -180,7 +223,22 @@ impl Step {
     }
 
     pub fn run(argv: &[&str]) -> Self {
-        Self::Run { argv: strings(argv) }
+        Self::Run { argv: strings(argv), unless: Vec::new() }
+    }
+
+    /// A command only needed until one of `alternatives` is installed, e.g.
+    /// answering a package's license question before installing it.
+    pub fn run_unless(alternatives: &[&str], argv: &[&str]) -> Self {
+        Self::Run { argv: strings(argv), unless: strings(alternatives) }
+    }
+
+    pub fn write_file(path: &str, contents: &str) -> Self {
+        Self::WriteFile { path: path.into(), contents: contents.into() }
+    }
+
+    /// An install skipped when any of `alternatives` is installed.
+    pub fn install_unless(alternatives: &[&str], packages: &[&str]) -> Self {
+        Self::Install { packages: strings(packages), unless: strings(alternatives) }
     }
 
     /// The command line (or a description, for edits and AUR builds) shown on
@@ -221,8 +279,27 @@ impl Step {
                 let only = if *if_exists { " (if the file exists)" } else { "" };
                 format!("edit {}: {edit}{only}", path.display())
             }
+            Self::WriteFile { path, .. } => format!("write {}", path.display()),
+            Self::Download { url, path, .. } => {
+                format!("download {url} to {} and check its SHA-256", path.display())
+            }
+            Self::Swap { from, to } => format!("dnf swap -y {from} {to} --allowerasing"),
+            Self::AddToGroup { user, group } => format!("usermod -aG {group} {user}"),
+            Self::ForeignArch { arch } => format!("dpkg --add-architecture {arch}"),
+            Self::RemoveSnaps => "snap remove --purge every installed snap".into(),
+            Self::UbuntuDriver { open: true, .. } => {
+                "apt-get install -y the newest nvidia-driver-<branch>-open that ubuntu-drivers lists".into()
+            }
+            Self::UbuntuDriver { open: false, max_branch } => format!(
+                "apt-get install -y the newest nvidia-driver-<branch> that ubuntu-drivers lists{}",
+                max_branch.map(|m| format!(", up to {m}")).unwrap_or_default()
+            ),
             Self::EnableService { unit } => format!("systemctl enable --now {unit}"),
-            Self::Run { argv } => argv.iter().map(|a| shell_quote(a)).collect::<Vec<_>>().join(" "),
+            Self::Run { argv, unless } => format!(
+                "{}{}",
+                argv.iter().map(|a| shell_quote(a)).collect::<Vec<_>>().join(" "),
+                unless_note(unless)
+            ),
         }
     }
 }
@@ -245,7 +322,7 @@ fn strings(items: &[&str]) -> Vec<String> {
     items.iter().map(|s| (*s).to_owned()).collect()
 }
 
-fn shell_quote(arg: &str) -> String {
+pub(crate) fn shell_quote(arg: &str) -> String {
     let safe = !arg.is_empty() && arg.chars().all(|c| c.is_ascii_alphanumeric() || "-_./=:@+,".contains(c));
     if safe { arg.to_owned() } else { format!("'{}'", arg.replace('\'', r"'\''")) }
 }

@@ -86,7 +86,17 @@ QtObject {
             "arch.multilib": "layers",
             "arch.build-tools": "hammer",
             "arch.aur-helper": "package",
-            "desktop.cinnamon-mint": "palette"
+            "desktop.cinnamon-mint": "palette",
+            "fedora.dnf-tweaks": "download",
+            "fedora.rpmfusion": "layers",
+            "gpu.mesa-freeworld": "film",
+            "debian.sudo": "shield-check",
+            "debian.sources": "layers",
+            "debian.backports": "refresh-cw",
+            "apt.i386": "cpu",
+            "ubuntu.multiverse": "layers",
+            "ubuntu.replace-snap": "package",
+            "mint.swappiness": "memory-stick"
         };
         if (byId[id])
             return byId[id];

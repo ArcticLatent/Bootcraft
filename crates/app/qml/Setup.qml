@@ -38,6 +38,9 @@ QtObject {
     readonly property var selectedTasks: catalog ? catalog.tasks.filter(t => taskSelected(t)) : []
     property var plan: null
     property string planError: ""
+    /// Apps' download size: {bytes, partial}.
+    property var downloadSize: null
+    property int _sizeSerial: 0
     /// System tasks in the plan, including ones pulled in as requirements.
     readonly property var planSystemTasks: plan ? plan.tasks.filter(t => !t.isApp) : []
     readonly property int appCount: plan ? plan.appCount : selectedApps.length
@@ -274,13 +277,29 @@ QtObject {
     function _replan() {
         if (!catalog)
             return;
-        Api.call("plan", selection()).then(p => {
+        const request = selection();
+        Api.call("plan", request).then(p => {
             setup.plan = p;
             setup.planError = "";
         }).catch(e => {
             setup.plan = null;
             setup.planError = String(e);
         });
+        // A newer request wins if the selection changes while this one runs.
+        const serial = ++_sizeSerial;
+        Api.call("download_size", request).then(size => {
+            if (serial === setup._sizeSerial)
+                setup.downloadSize = size;
+        }).catch(() => {});
+    }
+
+    /// "about 3.2 GB", or "" before it's known or when there's nothing to download.
+    function downloadLabel() {
+        if (!downloadSize || downloadSize.bytes === 0)
+            return "";
+        const gb = downloadSize.bytes / 1e9;
+        const amount = gb >= 1 ? gb.toFixed(1) + " GB" : Math.max(1, Math.round(downloadSize.bytes / 1e6)) + " MB";
+        return (downloadSize.partial ? "about " : "") + amount;
     }
 
     function exportPlan(path) {

@@ -229,8 +229,14 @@ impl Builder {
     }
 
     /// Tasks the native package needs on Arch, e.g. multilib for `lib32-*`.
-    fn arch_requires(mut self, tasks: &[&'static str]) -> Self {
-        if self.platform == Some(Platform::Arch)
+    fn arch_requires(self, tasks: &[&'static str]) -> Self {
+        self.requires_on(&[Platform::Arch], tasks)
+    }
+
+    /// Tasks the native package needs on these platforms, e.g. 32-bit
+    /// packages and Debian's contrib component for Steam.
+    fn requires_on(mut self, platforms: &[Platform], tasks: &[&'static str]) -> Self {
+        if self.platform.is_some_and(|p| platforms.contains(&p))
             && let Some(native) = &mut self.app.native
         {
             native.requires.extend_from_slice(tasks);
@@ -489,6 +495,9 @@ pub fn apps(sys: &System) -> Vec<App> {
             .arch_requires(multilib)
             .rpmfusion(&["steam"])
             .deb(&["steam-installer"])
+            .requires_on(&[Platform::Debian], &["apt.i386", "debian.sources"])
+            .requires_on(&[Platform::Ubuntu], &["apt.i386", "ubuntu.multiverse"])
+            .requires_on(&[Platform::Mint], &["apt.i386"])
             .native_first()
             .build(),
         app(sys, "heroic", "Heroic", "Epic, GOG and Amazon games", Gaming)
