@@ -10,7 +10,7 @@ expression: summarize(&tasks(&sys))
       note: The 580 branch gets security fixes only.
       note: Secure Boot is on. Arch does not sign kernel modules, so the driver will not load until you sign it (for example with sbctl) or turn Secure Boot off.
 [x] Multimedia gpu.nvidia-vaapi — Hardware video decoding on NVIDIA
-[x] Tools      arch.paru — AUR helper (paru)
+[x] Tools      arch.aur-helper — AUR helper (yay)
 [x] Apps       flatpak.flathub — Flatpak with Flathub
 [x] Multimedia media.codecs — Media codecs and thumbnails
 [x] Tools      tools.archive — Archive tools

@@ -76,7 +76,17 @@ pub fn detect(root: &Path, env: &Env) -> System {
         ssh_server: ["usr/lib/systemd/system/sshd.service", "usr/lib/systemd/system/ssh.service"]
             .iter()
             .any(|unit| root.join(unit).exists()),
+        memory_bytes: memory(root),
+        disk_free_bytes: rustix::fs::statvfs(root).ok().map(|fs| fs.f_bavail.saturating_mul(fs.f_frsize)),
     }
+}
+
+/// `MemTotal` from /proc/meminfo, which is in kibibytes.
+fn memory(root: &Path) -> Option<u64> {
+    let meminfo = fs::read_to_string(root.join("proc/meminfo")).ok()?;
+    let line = meminfo.lines().find_map(|l| l.strip_prefix("MemTotal:"))?;
+    let kib: u64 = line.split_whitespace().next()?.parse().ok()?;
+    Some(kib * 1024)
 }
 
 fn secure_boot(root: &Path) -> SecureBoot {

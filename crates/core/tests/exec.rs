@@ -173,38 +173,32 @@ fn aur_packages_are_built_as_the_user_and_installed_as_root() {
     let sys = f.detect("KDE");
     let home = f.root().join("home/burce");
     let user = User { name: "burce".into(), uid: 1000, home: home.clone() };
-    let built = home.join(".cache/bootcraft/aur/paru-bin/paru-bin-2.1.0-1-x86_64.pkg.tar.zst");
+    let built = home.join(".cache/bootcraft/aur/yay-bin/yay-bin-13.0.1-1-x86_64.pkg.tar.zst");
     let built_str = built.display().to_string();
     let listed = built_str.clone();
-    let paru_conf_path = f.root().join("etc/paru.conf");
     let respond: Respond = Box::new(move |argv| {
         match argv[0].as_str() {
         "curl" => (
             true,
-            r#"{"type":"multiinfo","results":[{"Name":"paru-bin","PackageBase":"paru-bin","Depends":["git","pacman","libalpm.so>=14"]}]}"#.into(),
+            r#"{"type":"multiinfo","results":[{"Name":"yay-bin","PackageBase":"yay-bin","Depends":["pacman>6.1","git"]}]}"#.into(),
         ),
         "makepkg" if argv.get(1).map(String::as_str) == Some("--packagelist") => {
             (true, format!("{listed}\n{listed}-debug-ignored\n"))
         }
-        // Installing paru-bin ships its config with BottomUp commented out.
-        "pacman" if argv.get(1).map(String::as_str) == Some("-U") => {
-            fs::write(&paru_conf_path, "[options]\n#BottomUp\nSudoLoop\n").unwrap();
-            (true, String::new())
-        }
         _ => (true, String::new()),
     }
     });
-    let run = execute(&f, &sys, &["arch.paru"], Some(user), respond);
-    assert_eq!(run.outcome("arch.paru").0, Outcome::Done, "{:#?}", run.events);
+    let run = execute(&f, &sys, &["arch.aur-helper"], Some(user), respond);
+    assert_eq!(run.outcome("arch.aur-helper").0, Outcome::Done, "{:#?}", run.events);
 
     let cache = home.join(".cache/bootcraft/aur");
     let expected = [
         "$ pacman -Syu --noconfirm".to_owned(),
-        "$ curl -fsSLg --max-time 30 https://aur.archlinux.org/rpc/v5/info?arg[]=paru-bin".to_owned(),
+        "$ curl -fsSLg --max-time 30 https://aur.archlinux.org/rpc/v5/info?arg[]=yay-bin".to_owned(),
         format!("$ mkdir -p {}  (as burce)", cache.display()),
         format!(
-            "$ git clone --depth 1 https://aur.archlinux.org/paru-bin.git {}  (as burce)",
-            cache.join("paru-bin").display()
+            "$ git clone --depth 1 https://aur.archlinux.org/yay-bin.git {}  (as burce)",
+            cache.join("yay-bin").display()
         ),
         "$ makepkg --noconfirm --nocheck -f  (as burce)".to_owned(),
         "$ makepkg --packagelist  (as burce)".to_owned(),
@@ -214,8 +208,6 @@ fn aur_packages_are_built_as_the_user_and_installed_as_root() {
     assert_eq!(run.commands, expected);
     // git and libalpm.so are already satisfied, so no repository deps were queried.
     assert!(!run.commands.iter().any(|c| c.contains("pacman -Sp")));
-    let paru_conf = fs::read_to_string(f.root().join("etc/paru.conf")).unwrap();
-    assert_eq!(paru_conf, "[options]\nBottomUp\nSudoLoop\n");
 }
 
 #[test]
@@ -223,8 +215,8 @@ fn aur_without_a_regular_user_explains_why() {
     let f = arch_box();
     f.package("base-devel", &[]).package("git", &[]);
     let sys = f.detect("KDE");
-    let run = execute(&f, &sys, &["arch.paru"], None, succeed());
-    let (outcome, message) = run.outcome("arch.paru");
+    let run = execute(&f, &sys, &["arch.aur-helper"], None, succeed());
+    let (outcome, message) = run.outcome("arch.aur-helper");
     assert_eq!(outcome, Outcome::Failed);
     assert!(message.unwrap().contains("built as a regular user"));
 }
@@ -384,13 +376,30 @@ mod signed {
 }
 
 #[test]
-fn yay_users_get_no_second_aur_helper() {
+fn an_existing_aur_helper_is_kept() {
     let f = arch_box();
-    f.package("base-devel", &[]).package("git", &[]).package("yay", &[]);
+    f.package("base-devel", &[]).package("git", &[]).package("paru", &[]);
     let sys = f.detect("KDE");
-    let run = execute(&f, &sys, &["arch.paru"], None, succeed());
-    assert_eq!(run.outcome("arch.paru").0, Outcome::AlreadyDone);
-    assert!(!f.root().join("etc/paru.conf").exists(), "no paru.conf for a paru that isn't installed");
+    let run = execute(&f, &sys, &["arch.aur-helper"], None, succeed());
+    assert_eq!(run.outcome("arch.aur-helper").0, Outcome::AlreadyDone);
+    // The required system update still runs; no yay is built or installed.
+    assert!(
+        !run.commands.iter().any(|c| c.contains("yay-bin") || c.contains("makepkg")),
+        "no second AUR helper: {:?}",
+        run.commands
+    );
+}
+
+#[test]
+fn optional_program_configs_are_not_created() {
+    // The Mint look edits lightdm.conf only if LightDM is there.
+    let f = Fixture::new(ARCH);
+    f.kernel("7.2.11-arch1-1", "linux");
+    let sys = f.detect("X-Cinnamon");
+    let task = catalog(&sys).tasks.into_iter().find(|t| t.id == "desktop.cinnamon-mint").unwrap();
+    let edit = task.steps.iter().find(|s| matches!(s, bootcraft_core::Step::Edit { .. })).unwrap();
+    let probe = bootcraft_core::probe::Probe::new(f.root(), bootcraft_core::system::Distro::Arch);
+    assert_eq!(probe.status(std::slice::from_ref(edit)), bootcraft_core::probe::Status::Done);
 }
 
 #[test]

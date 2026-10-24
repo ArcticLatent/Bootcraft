@@ -225,6 +225,10 @@ pub struct System {
     pub arch_kernels: Vec<String>,
     /// An SSH server unit is installed, so a firewall must keep port 22 open.
     pub ssh_server: bool,
+    /// Installed RAM, from /proc/meminfo.
+    pub memory_bytes: Option<u64>,
+    /// Space available to the user on the root filesystem.
+    pub disk_free_bytes: Option<u64>,
 }
 
 impl System {

@@ -96,6 +96,8 @@ fn detects_hardware_and_session() {
     assert_eq!(sys.arch_kernels, ["linux-zen", "linux73-tkg-eevdf"]);
     assert_eq!(sys.secure_boot, SecureBoot::NotEfi);
     assert!(!sys.ssh_server);
+    assert_eq!(sys.memory_bytes, Some(65_536_000 * 1024));
+    assert!(sys.disk_free_bytes.is_some());
     assert!(sys.warnings().is_empty());
 }
 
@@ -160,14 +162,14 @@ fn catalog_invariants_hold_for_every_fixture() {
 #[test]
 fn requirements_are_pulled_in_and_ordered() {
     let sys = kde_rtx4070().detect("KDE");
-    let plan = plan_tasks(&sys, &["arch.paru"]).unwrap();
+    let plan = plan_tasks(&sys, &["arch.aur-helper"]).unwrap();
     let order: Vec<_> = plan.tasks.iter().map(|t| (t.id.as_str(), t.required_by.as_deref())).collect();
     assert_eq!(
         order,
         [
             ("system.update", Some("arch.build-tools")),
-            ("arch.build-tools", Some("arch.paru")),
-            ("arch.paru", None),
+            ("arch.build-tools", Some("arch.aur-helper")),
+            ("arch.aur-helper", None),
         ]
     );
 }

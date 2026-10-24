@@ -7,7 +7,7 @@ tools and optional debloating, for **Fedora**, **Arch Linux**, **Ubuntu**,
 rebuilt as a Rust + Qt Quick desktop app.
 
 > **Status:** early development. On Arch Linux, Bootcraft detects, plans and
-> applies from the terminal; other distributions and the GUI follow.
+> applies, from the desktop app or the terminal; other distributions follow.
 
 ## How it works
 
@@ -63,18 +63,21 @@ Ed25519 signature and the package's SHA-256.
 ## Layout
 
 ```
-crates/core     detection, task catalog, planner, probe (no root, no Qt)
+crates/core     detection, task catalog, planner, probe, executor (no Qt)
 crates/helper   bootcraft-helper: the privileged side, also a headless CLI
+crates/app      bootcraft: the Qt Quick desktop app (CXX-Qt)
 data/polkit     polkit action for `pkexec /usr/lib/bootcraft/bootcraft-helper serve`
 ```
 
-The GUI (`crates/app`, CXX-Qt + Qt Quick Controls) will run unprivileged and
-start `bootcraft-helper` once through pkexec. The helper accepts task IDs only
-and re-detects the system itself.
+The app runs unprivileged and starts `bootcraft-helper serve` once per setup
+through pkexec, then shows its progress. The helper accepts task and app IDs
+only and re-detects the system itself.
 
 ## Try it
 
 ```bash
+cargo run -p bootcraft                            # the desktop app (needs Qt 6 with QtQuick and QtSvg)
+
 cargo run -p bootcraft-helper -- detect           # what Bootcraft sees
 cargo run -p bootcraft-helper -- tasks            # available tasks, ticked = recommended
 cargo run -p bootcraft-helper -- plan             # dry run of the recommended set
@@ -96,7 +99,17 @@ from out-of-date databases is unsupported there.
 cargo test                 # unit tests + fixture-based snapshot tests
 cargo insta review         # after an intended change to a plan snapshot
 cargo clippy --all-targets
+
+# The app without a window: save a screenshot (optionally of page N, with
+# workflows ticked, or mid-way through a sample run) and quit.
+QT_QPA_PLATFORM=offscreen QT_QUICK_BACKEND=software \
+  target/debug/bootcraft --screenshot=shot.png [--page=1] [--packs=creative] [--demo-run]
 ```
+
+Icons are [Lucide](https://lucide.dev) (ISC), logos come from
+[Simple Icons](https://simpleicons.org) (CC0; trademarks of their owners), and
+the fonts are Geist and JetBrains Mono (OFL). App icons are downloaded from
+Flathub on first view and cached in `~/.cache/bootcraft/icons`.
 
 ## License
 

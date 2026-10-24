@@ -24,9 +24,8 @@ Bootcraft plan for Arch Linux (13 tasks)
 [6/13] Hardware video decoding on NVIDIA  (gpu.nvidia-vaapi)
     $ pacman -S --needed --noconfirm libva-nvidia-driver
 
-[7/13] AUR helper (paru)  (arch.paru)
-    $ build from the AUR as your user, then pacman -U: paru-bin  (skipped if paru, yay or pikaur is already installed)
-    $ edit /etc/paru.conf: enable BottomUp in [options] (if the file exists)
+[7/13] AUR helper (yay)  (arch.aur-helper)
+    $ build from the AUR as your user, then pacman -U: yay-bin  (skipped if yay, paru or pikaur is already installed)
 
 [8/13] Flatpak with Flathub  (flatpak.flathub)
     $ pacman -S --needed --noconfirm flatpak

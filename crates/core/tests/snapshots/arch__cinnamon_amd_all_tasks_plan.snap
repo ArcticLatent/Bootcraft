@@ -17,9 +17,8 @@ Bootcraft plan for Arch Linux (15 tasks)
 [4/15] Build tools (base-devel, git)  (arch.build-tools)
     $ pacman -S --needed --noconfirm base-devel git
 
-[5/15] AUR helper (paru)  (arch.paru)
-    $ build from the AUR as your user, then pacman -U: paru-bin  (skipped if paru, yay or pikaur is already installed)
-    $ edit /etc/paru.conf: enable BottomUp in [options] (if the file exists)
+[5/15] AUR helper (yay)  (arch.aur-helper)
+    $ build from the AUR as your user, then pacman -U: yay-bin  (skipped if yay, paru or pikaur is already installed)
 
 [6/15] Flatpak with Flathub  (flatpak.flathub)
     $ pacman -S --needed --noconfirm flatpak

@@ -6,7 +6,8 @@ on:
   pull_request:
 
 jobs:
-  check:
+  core:
+    name: core and helper
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -15,5 +16,22 @@ jobs:
           components: rustfmt, clippy
       - uses: Swatinem/rust-cache@v2
       - run: cargo fmt --check
-      - run: cargo clippy --all-targets -- -D warnings
-      - run: cargo test
+      - run: cargo clippy -p bootcraft-core -p bootcraft-helper --all-targets -- -D warnings
+      - run: cargo test -p bootcraft-core -p bootcraft-helper
+
+  app:
+    name: app (Qt 6 on Arch)
+    runs-on: ubuntu-latest
+    container: archlinux:latest
+    steps:
+      - run: pacman -Syu --noconfirm --needed base-devel git rust qt6-base qt6-declarative qt6-svg
+      - uses: actions/checkout@v4
+      - run: cargo clippy -p bootcraft --all-targets -- -D warnings
+      - run: cargo test -p bootcraft
+      - name: Interface loads
+        # Renders the window off-screen and saves it; fails if any QML fails to load.
+        run: |
+          cargo build -p bootcraft
+          QT_FORCE_STDERR_LOGGING=1 QT_QPA_PLATFORM=offscreen QT_QUICK_BACKEND=software \
+            timeout 120 target/debug/bootcraft --screenshot=/tmp/overview.png
+          test -s /tmp/overview.png

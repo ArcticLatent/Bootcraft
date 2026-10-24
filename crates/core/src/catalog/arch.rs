@@ -17,7 +17,7 @@ pub fn tasks(sys: &System) -> Vec<Task> {
             tasks.push(nvidia_vaapi());
         }
     }
-    tasks.extend([paru(), flathub(), codecs(), archive(), drives(), fonts(), ms_fonts(), firmware()]);
+    tasks.extend([aur_helper(), flathub(), codecs(), archive(), drives(), fonts(), ms_fonts(), firmware()]);
     if sys.desktop == Desktop::Cinnamon {
         tasks.push(cinnamon_mint());
     }
@@ -139,13 +139,12 @@ fn nvidia_vaapi() -> Task {
         .step(Step::install(&["libva-nvidia-driver"]))
 }
 
-fn paru() -> Task {
-    Task::new("arch.paru", Category::Tools, "AUR helper (paru)")
+fn aur_helper() -> Task {
+    Task::new("arch.aur-helper", Category::Tools, "AUR helper (yay)")
         .recommended()
-        .description("Install paru (prebuilt) unless you already use an AUR helper, and list search results bottom-up.")
+        .description("Install yay (prebuilt) unless you already use an AUR helper.")
         .requires(&[BUILD_TOOLS])
-        .step(Step::aur_unless(&["paru", "yay", "pikaur"], &["paru-bin"]))
-        .step(Step::edit_existing("/etc/paru.conf", Edit::flag("options", "BottomUp")))
+        .step(Step::aur_unless(&["yay", "paru", "pikaur"], &["yay-bin"]))
 }
 
 fn flathub() -> Task {

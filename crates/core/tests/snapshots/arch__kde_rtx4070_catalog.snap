@@ -8,7 +8,7 @@ expression: summarize(&tasks(&sys))
 [x] Tools      arch.build-tools — Build tools (base-devel, git)
 [x] Drivers    gpu.nvidia — NVIDIA driver (open kernel modules)
 [x] Multimedia gpu.nvidia-vaapi — Hardware video decoding on NVIDIA
-[x] Tools      arch.paru — AUR helper (paru)
+[x] Tools      arch.aur-helper — AUR helper (yay)
 [x] Apps       flatpak.flathub — Flatpak with Flathub
 [x] Multimedia media.codecs — Media codecs and thumbnails
 [x] Tools      tools.archive — Archive tools

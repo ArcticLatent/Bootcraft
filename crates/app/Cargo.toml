@@ -1,0 +1,19 @@
+[package]
+name = "bootcraft"
+description = "Bootcraft's desktop app"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[build-dependencies]
+cxx-qt-build = "0.10"
+
+[dependencies]
+bootcraft-core.workspace = true
+cxx = "1.0.176"
+cxx-qt = "0.10"
+cxx-qt-lib = { version = "0.10", features = ["qt_gui", "qt_qml", "qt_quickcontrols"] }
+serde.workspace = true
+serde_json.workspace = true

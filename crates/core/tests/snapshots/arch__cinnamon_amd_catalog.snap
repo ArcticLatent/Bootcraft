@@ -6,7 +6,7 @@ expression: summarize(&tasks)
 [x] System     arch.multilib — Enable the multilib repository
 [x] System     system.update — Update the system
 [x] Tools      arch.build-tools — Build tools (base-devel, git)
-[x] Tools      arch.paru — AUR helper (paru)
+[x] Tools      arch.aur-helper — AUR helper (yay)
 [x] Apps       flatpak.flathub — Flatpak with Flathub
 [x] Multimedia media.codecs — Media codecs and thumbnails
 [x] Tools      tools.archive — Archive tools

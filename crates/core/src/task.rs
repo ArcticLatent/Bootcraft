@@ -140,7 +140,7 @@ pub enum Step {
     Edit {
         path: PathBuf,
         edit: Edit,
-        /// The file belongs to an optional program (paru, LightDM): leave it
+        /// The file belongs to an optional program (e.g. LightDM): leave it
         /// alone when it doesn't exist instead of creating it.
         #[serde(default, skip_serializing_if = "std::ops::Not::not")]
         if_exists: bool,
@@ -165,7 +165,7 @@ impl Step {
     }
 
     /// An AUR install that is skipped when any of `alternatives` is
-    /// installed, e.g. `paru-bin` unless you already use paru or yay.
+    /// installed, e.g. `yay-bin` unless you already use yay or paru.
     pub fn aur_unless(alternatives: &[&str], packages: &[&str]) -> Self {
         Self::AurInstall { packages: strings(packages), unless: strings(alternatives) }
     }

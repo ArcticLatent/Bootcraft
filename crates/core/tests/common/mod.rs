@@ -38,6 +38,7 @@ impl Fixture {
         let fixture = Self { dir: TempDir::new().unwrap() };
         fixture.file("etc/os-release", os_release);
         fixture.file("proc/sys/kernel/osrelease", "7.2.11-arch1-1\n");
+        fixture.file("proc/meminfo", "MemTotal:       65536000 kB\nMemFree:        1000 kB\n");
         fixture
     }
 
